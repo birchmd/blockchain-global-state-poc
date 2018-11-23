@@ -1,15 +1,15 @@
 extern crate parity_wasm;
 extern crate wasmi;
 
-use super::storage::key::Key;
-use super::storage::value::Value;
-use super::storage::{Error as StorageError, ExecutionEffect, GlobalState, TrackingCopy};
-use std::fmt;
 use self::wasmi::{
     Error as InterpreterError, Externals, FuncInstance, FuncRef, HostError, ImportsBuilder,
     ModuleImportResolver, ModuleInstance, ModuleRef, RuntimeArgs, RuntimeValue, Signature, Trap,
     ValueType,
 };
+use super::storage::key::Key;
+use super::storage::value::Value;
+use super::storage::{Error as StorageError, ExecutionEffect, GlobalState, TrackingCopy};
+use std::fmt;
 
 #[derive(Debug)]
 pub enum Error {
@@ -110,7 +110,7 @@ pub fn exec<T: TrackingCopy, G: GlobalState<T>>(
     let mut state = gs.tracking_copy();
     let mut runtime = Runtime {
         account,
-        state: &mut state
+        state: &mut state,
     };
     let _ = instance.invoke_export("call", &[], &mut runtime)?;
 
