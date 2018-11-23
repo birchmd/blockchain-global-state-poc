@@ -1,8 +1,8 @@
 extern crate wasmi;
 
+use self::wasmi::HostError;
 use std::collections::HashMap;
 use std::fmt;
-use self::wasmi::HostError;
 
 pub mod key;
 pub mod op;
@@ -37,12 +37,16 @@ pub trait GlobalState<T: TrackingCopy> {
     fn tracking_copy(&self) -> T;
 }
 
-pub type ExecutionEffect = (HashMap<Key, Op>, HashMap<Key, Transform>);
+pub enum ExecutionEffect {
+    Success(HashMap<Key, Op>, HashMap<Key, Transform>),
+    Error, //TODO: add better error reporting
+}
 
 pub trait TrackingCopy {
     fn read(&mut self, k: Key) -> Result<&Value, Error>;
     fn write(&mut self, k: Key, v: Value) -> Result<(), Error>;
     fn add(&mut self, k: Key, v: Value) -> Result<(), Error>;
+    fn fail(&mut self);
     fn effect(&self) -> ExecutionEffect;
 }
 
@@ -52,7 +56,9 @@ pub struct InMemGS {
 
 impl InMemGS {
     pub fn new() -> InMemGS {
-        InMemGS{ store: HashMap::new() }
+        InMemGS {
+            store: HashMap::new(),
+        }
     }
 }
 
@@ -79,6 +85,7 @@ impl GlobalState<InMemTC> for InMemGS {
             store: self.store.clone(), //TODO: make more efficient
             ops: HashMap::new(),
             fns: HashMap::new(),
+            failed: false,
         }
     }
 }
@@ -87,6 +94,7 @@ pub struct InMemTC {
     store: HashMap<Key, Value>,
     ops: HashMap<Key, Op>,
     fns: HashMap<Key, Transform>,
+    failed: bool,
 }
 
 impl TrackingCopy for InMemTC {
@@ -133,7 +141,15 @@ impl TrackingCopy for InMemTC {
             }),
         }
     }
+    fn fail(&mut self) {
+        self.failed = true;
+    }
+
     fn effect(&self) -> ExecutionEffect {
-        (self.ops.clone(), self.fns.clone())
+        if self.failed {
+            ExecutionEffect::Error
+        } else {
+            ExecutionEffect::Success(self.ops.clone(), self.fns.clone())
+        }
     }
 }
