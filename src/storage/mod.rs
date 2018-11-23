@@ -1,4 +1,8 @@
+extern crate wasmi;
+
 use std::collections::HashMap;
+use std::fmt;
+use self::wasmi::HostError;
 
 pub mod key;
 pub mod op;
@@ -12,11 +16,20 @@ use self::transform::Transform;
 use self::utils::add;
 use self::value::Value;
 
+#[derive(Debug)]
 pub enum Error {
     KeyNotFound { key: Key },
     TypeMismatch { expected: String, found: String },
     Unknown,
 }
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl HostError for Error {}
 
 pub trait GlobalState<T: TrackingCopy> {
     fn apply(&mut self, k: Key, t: Transform) -> Result<(), Error>;
@@ -34,14 +47,20 @@ pub trait TrackingCopy {
 }
 
 pub struct InMemGS {
-    store: HashMap<Key, Value>
+    store: HashMap<Key, Value>,
+}
+
+impl InMemGS {
+    pub fn new() -> InMemGS {
+        InMemGS{ store: HashMap::new() }
+    }
 }
 
 impl GlobalState<InMemTC> for InMemGS {
     fn apply(&mut self, k: Key, t: Transform) -> Result<(), Error> {
         let maybe_curr = self.store.remove(&k);
         match maybe_curr {
-            None => Err(Error::KeyNotFound{ key: k }),
+            None => Err(Error::KeyNotFound { key: k }),
             Some(curr) => {
                 let new_value = t.apply(curr)?;
                 let _ = self.store.insert(k, new_value);
@@ -51,15 +70,15 @@ impl GlobalState<InMemTC> for InMemGS {
     }
     fn get(&self, k: &Key) -> Result<&Value, Error> {
         match self.store.get(k) {
-            None => Err(Error::KeyNotFound{ key: *k }),
-            Some(v) => Ok(v)
+            None => Err(Error::KeyNotFound { key: *k }),
+            Some(v) => Ok(v),
         }
-    } 
+    }
     fn tracking_copy(&self) -> InMemTC {
         InMemTC {
             store: self.store.clone(), //TODO: make more efficient
             ops: HashMap::new(),
-            fns: HashMap::new()
+            fns: HashMap::new(),
         }
     }
 }

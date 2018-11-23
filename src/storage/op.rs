@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops::Add;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -21,5 +22,11 @@ impl Add for Op {
             (Add, Add) => Add,
             _ => Write,
         }
+    }
+}
+
+impl fmt::Display for Op {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }

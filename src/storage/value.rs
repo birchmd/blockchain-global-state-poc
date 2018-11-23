@@ -1,3 +1,4 @@
+use std::fmt;
 use std::string::String;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -18,5 +19,11 @@ impl Value {
             String(_) => "String".to_string(),
             ByteArray(_) => "ByteArray".to_string(),
         }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }

@@ -1,4 +1,5 @@
 use super::value::Value;
+use std::fmt;
 use std::ops::Add;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -19,8 +20,11 @@ impl Transform {
                 Value::Int32(j) => Ok(Value::Int32(i + j)),
                 other => {
                     let expected = "Int32".to_string();
-                    Err(super::Error::TypeMismatch{ expected, found: other.type_string() })
-                },
+                    Err(super::Error::TypeMismatch {
+                        expected,
+                        found: other.type_string(),
+                    })
+                }
             },
         }
     }
@@ -40,5 +44,11 @@ impl Add for Transform {
                 other => Write(other),
             },
         }
+    }
+}
+
+impl fmt::Display for Transform {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
