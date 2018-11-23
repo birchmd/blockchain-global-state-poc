@@ -19,8 +19,8 @@ pub enum Error {
 }
 
 pub trait GlobalState<T: TrackingCopy> {
-    fn apply(&mut self, t: Transform) -> Result<(), Error>;
-    fn get(&self, k: &Key) -> Result<Value, Error>;
+    fn apply(&mut self, k: Key, t: Transform) -> Result<(), Error>;
+    fn get(&self, k: &Key) -> Result<&Value, Error>;
     fn tracking_copy(&self) -> T;
 }
 
@@ -31,6 +31,37 @@ pub trait TrackingCopy {
     fn write(&mut self, k: Key, v: Value) -> Result<(), Error>;
     fn add(&mut self, k: Key, v: Value) -> Result<(), Error>;
     fn effect(&self) -> ExecutionEffect;
+}
+
+pub struct InMemGS {
+    store: HashMap<Key, Value>
+}
+
+impl GlobalState<InMemTC> for InMemGS {
+    fn apply(&mut self, k: Key, t: Transform) -> Result<(), Error> {
+        let maybe_curr = self.store.remove(&k);
+        match maybe_curr {
+            None => Err(Error::KeyNotFound{ key: k }),
+            Some(curr) => {
+                let new_value = t.apply(curr)?;
+                let _ = self.store.insert(k, new_value);
+                Ok(())
+            }
+        }
+    }
+    fn get(&self, k: &Key) -> Result<&Value, Error> {
+        match self.store.get(k) {
+            None => Err(Error::KeyNotFound{ key: *k }),
+            Some(v) => Ok(v)
+        }
+    } 
+    fn tracking_copy(&self) -> InMemTC {
+        InMemTC {
+            store: self.store.clone(), //TODO: make more efficient
+            ops: HashMap::new(),
+            fns: HashMap::new()
+        }
+    }
 }
 
 pub struct InMemTC {

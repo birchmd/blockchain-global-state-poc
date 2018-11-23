@@ -10,6 +10,22 @@ pub enum Transform {
 
 use self::Transform::*;
 
+impl Transform {
+    pub fn apply(&self, v: Value) -> Result<Value, super::Error> {
+        match self {
+            Identity => Ok(v),
+            Write(w) => Ok(w.clone()),
+            Add(i) => match v {
+                Value::Int32(j) => Ok(Value::Int32(i + j)),
+                other => {
+                    let expected = "Int32".to_string();
+                    Err(super::Error::TypeMismatch{ expected, found: other.type_string() })
+                },
+            },
+        }
+    }
+}
+
 impl Add for Transform {
     type Output = Transform;
 
