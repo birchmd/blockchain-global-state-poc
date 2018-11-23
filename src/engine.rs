@@ -7,7 +7,7 @@ use self::wasmi::{
     RuntimeValue, Signature, Trap, ValueType,
 };
 use super::storage::key::Key;
-use super::storage::value::Value;
+use super::storage::value::{self, Value};
 use super::storage::{Error as StorageError, ExecutionEffect, GlobalState, TrackingCopy};
 
 use std::collections::HashSet;
@@ -87,7 +87,7 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         value_size: usize,
     ) -> Result<Value, Error> {
         match value_type {
-            0 => {
+            value::INT32_ID => {
                 if value_size == 4 {
                     let mut buf = [0u8; 4];
                     self.memory.get_into(value_ptr, &mut buf[..])?;
@@ -100,7 +100,7 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
                     })
                 }
             }
-            1 => {
+            value::BYTEARRAY_ID => {
                 let bytes = self.memory.get(value_ptr, value_size)?;
                 Ok(Value::ByteArray(bytes))
             }
@@ -124,10 +124,27 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         let value = self.value_from_mem(value_type, value_ptr, value_size as usize)?;
         self.state.write(key, value).map_err(|e| e.into())
     }
+
+    pub fn read(&mut self, args: RuntimeArgs) -> Result<u32, Trap> {
+        //args(0) = key type (must be one of 0, 1, 2)
+        //args(1) = pointer to key in wasm memory
+        //args(2) = value destination pointer
+        let key_type: u32 = args.nth_checked(0)?;
+        let key_ptr: u32 = args.nth_checked(1)?;
+        let key = self.key_from_mem(key_type, key_ptr)?;
+        let value = self.state.read(key)?;
+        let value_type = value.indicator();
+        let value_ptr: u32 = args.nth_checked(2)?;
+        self.memory
+            .set(value_ptr, value.serialize())
+            .map_err(|e| -> Error { e.into() })?;
+        Ok(value_type)
+    }
 }
 
 //TODO: add other functions
 const WRITE_FUNC_INDEX: usize = 0;
+const READ_FUNC_INDEX: usize = 1;
 
 impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
     fn invoke_index(
@@ -139,6 +156,11 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
             WRITE_FUNC_INDEX => {
                 let _ = self.write(args)?;
                 Ok(None)
+            }
+
+            READ_FUNC_INDEX => {
+                let vtype = self.read(args)?;
+                Ok(Some(vtype.into()))
             }
             _ => panic!("unknown function index"),
         }
@@ -157,6 +179,10 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
             "write" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 5][..], None),
                 WRITE_FUNC_INDEX,
+            ),
+            "read" => FuncInstance::alloc_host(
+                Signature::new(&[ValueType::I32; 3][..], Some(ValueType::I32)),
+                READ_FUNC_INDEX,
             ),
             _ => {
                 return Err(InterpreterError::Function(format!(

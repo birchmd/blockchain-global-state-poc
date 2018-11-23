@@ -11,6 +11,12 @@ pub enum Value {
     Acct(Account),
 }
 
+pub const INT32_ID: u32 = 0;
+pub const BYTEARRAY_ID: u32 = 1;
+pub const LISTINT32_ID: u32 = 2;
+pub const STRING_ID: u32 = 3;
+pub const ACCT_ID: u32 = 4;
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Account {
     public_key: [u8; 32],
@@ -21,6 +27,10 @@ pub struct Account {
 use self::Value::*;
 
 impl Value {
+    pub fn serialize(&self) -> &[u8] {
+        panic!("Unimplemented!");
+    }
+
     pub fn type_string(&self) -> String {
         match self {
             Int32(_) => "Int32".to_string(),
@@ -28,6 +38,16 @@ impl Value {
             String(_) => "String".to_string(),
             ByteArray(_) => "ByteArray".to_string(),
             Acct(_) => "Account".to_string(),
+        }
+    }
+
+    pub fn indicator(&self) -> u32 {
+        match self {
+            Int32(_) => INT32_ID,
+            ByteArray(_) => BYTEARRAY_ID,
+            ListInt32(_) => LISTINT32_ID,
+            String(_) => STRING_ID,
+            Acct(_) => ACCT_ID,
         }
     }
 
