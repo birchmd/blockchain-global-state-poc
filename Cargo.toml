@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Michael Birch <birchmd@casperlabs.io>"]
 
 [dependencies]
-parity-wasm = "0.31.3"
 wasmi = "0.4.2"
 
 [profile.release]

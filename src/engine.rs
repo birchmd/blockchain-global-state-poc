@@ -1,4 +1,3 @@
-extern crate parity_wasm;
 extern crate wasmi;
 
 use self::wasmi::{
