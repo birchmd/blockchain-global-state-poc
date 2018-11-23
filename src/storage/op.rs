@@ -1,6 +1,6 @@
 use std::ops::Add;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Op {
     Read,
     Write,

@@ -1,7 +1,7 @@
 use super::value::Value;
 use std::ops::Add;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Transform {
     Identity,
     Write(Value),
