@@ -195,9 +195,8 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
     }
 }
 
-pub fn instantiate(module: wasmi::Module) -> Result<ModuleRef, Error> {
-    let mut imports = ImportsBuilder::new();
-    imports.push_resolver("env", &RuntimeModuleImportResolver);
+pub fn instantiate(module: &wasmi::Module) -> Result<ModuleRef, Error> {
+    let imports = ImportsBuilder::new().with_resolver("env", &RuntimeModuleImportResolver);
 
     let instance = ModuleInstance::new(&module, &imports)?.assert_no_start();
 

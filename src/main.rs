@@ -18,6 +18,6 @@ fn main() {
     let gs = storage::InMemGS::new();
     let account: [u8; 20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-    let init = engine::instantiate(module).unwrap();
+    let init = engine::instantiate(&module).unwrap();
     let _ = engine::exec(init, account, &gs);
 }
