@@ -1,6 +1,5 @@
 use super::value::Value;
 use std::fmt;
-use std::ops::Add;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Transform {
@@ -10,6 +9,7 @@ pub enum Transform {
 }
 
 use self::Transform::*;
+use super::utils::{Semigroup, Monoid};
 
 impl Transform {
     pub fn apply(&self, v: Value) -> Result<Value, super::Error> {
@@ -30,15 +30,19 @@ impl Transform {
     }
 }
 
-impl Add for Transform {
-    type Output = Transform;
+impl Semigroup for Transform {
+    fn zero() -> Self {
+        Identity
+    }
+}
 
-    fn add(self, other: Transform) -> Transform {
+impl Monoid for Transform {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (a, Identity) => a,
             (Identity, b) => b,
             (_, b @ Write(_)) => b,
-            (Add(i), Add(j)) => Add(i + j),
+            (Transform::Add(i), Transform::Add(j)) => Transform::Add(i + j),
             (Write(v), Add(j)) => match v {
                 Value::Int32(i) => Write(Value::Int32(i + j)),
                 other => Write(other),

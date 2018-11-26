@@ -1,5 +1,5 @@
 use std::fmt;
-use std::ops::Add;
+use super::utils::{Semigroup, Monoid};
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Op {
@@ -11,10 +11,20 @@ pub enum Op {
 
 use self::Op::*;
 
-impl Add for Op {
-    type Output = Op;
+impl fmt::Display for Op {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
-    fn add(self, other: Op) -> Op {
+impl Semigroup for Op {
+    fn zero() -> Self {
+        Op::NoOp
+    }
+}
+
+impl Monoid for Op {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (a, NoOp) => a,
             (NoOp, b) => b,
@@ -22,11 +32,5 @@ impl Add for Op {
             (Add, Add) => Add,
             _ => Write,
         }
-    }
-}
-
-impl fmt::Display for Op {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
     }
 }
