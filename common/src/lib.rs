@@ -18,6 +18,7 @@ pub mod ext {
     extern "C" {
         pub fn read(key: &Key) -> Value;
         pub fn write(key: &Key, value: &Value);
+        pub fn new_uref() -> Key;
     }
 }
 

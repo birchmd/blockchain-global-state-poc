@@ -1,5 +1,6 @@
 use super::alloc::alloc::{Alloc, Global};
 use super::alloc::string::String;
+use super::key::Key;
 use core::ops::Deref;
 
 #[repr(C)]
@@ -7,6 +8,15 @@ use core::ops::Deref;
 pub struct Array<T> {
     elems: *mut T,
     pub size: usize,
+}
+impl<T> Array<T> {
+    pub fn new() -> Self {
+        let ptr: *mut T = Global.alloc_array(1).unwrap().as_ptr();
+        Array {
+            elems: ptr,
+            size: 0,
+        }
+    }
 }
 impl<T> Deref for Array<T> {
     type Target = [T];
@@ -28,7 +38,8 @@ impl<T: Eq> Eq for Array<T> {}
 impl<T: Clone> Clone for Array<T> {
     fn clone(&self) -> Self {
         unsafe {
-            let ptr: *mut T = Global.alloc_array(self.size).unwrap().as_ptr();
+            let size = if self.size <= 0 { 1 } else { self.size };
+            let ptr: *mut T = Global.alloc_array(size).unwrap().as_ptr();
 
             for i in 0..self.size {
                 let t: T = (*self.elems.offset(i as isize)).clone();
@@ -60,7 +71,7 @@ pub enum Value {
 pub struct Account {
     public_key: [u8; 32],
     nonce: u64,
-    known_urefs: Array<super::key::Key>,
+    known_urefs: Array<Key>,
 }
 
 use self::Value::*;
@@ -103,7 +114,15 @@ impl Value {
 }
 
 impl Account {
-    pub fn urefs(&self) -> &[super::key::Key] {
+    pub fn new(public_key: [u8; 32], nonce: u64, known_urefs: Array<Key>) -> Account {
+        Account {
+            public_key,
+            nonce,
+            known_urefs,
+        }
+    }
+
+    pub fn urefs(&self) -> &[Key] {
         &self.known_urefs
     }
 }

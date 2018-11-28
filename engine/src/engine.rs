@@ -99,11 +99,22 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
             .set(value_ptr, value.as_bytes())
             .map_err(|e| Error::Interpreter(e).into())
     }
+
+    pub fn new_uref(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
+        //args(0) = pointer to key destination in wasm memory
+        let key_ptr: u32 = args.nth_checked(0)?;
+        let key = self.state.new_uref();
+        self.known_urefs.insert(key);
+        self.memory
+            .set(key_ptr, key.as_bytes())
+            .map_err(|e| Error::Interpreter(e).into())
+    }
 }
 
 //TODO: add other functions
 const WRITE_FUNC_INDEX: usize = 0;
 const READ_FUNC_INDEX: usize = 1;
+const NEW_FUNC_INDEX: usize = 2;
 
 impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
     fn invoke_index(
@@ -121,6 +132,11 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
                 let _ = self.read(args)?;
                 Ok(None)
             }
+
+            NEW_FUNC_INDEX => {
+                let _ = self.new_uref(args)?;
+                Ok(None)
+            }
             _ => panic!("unknown function index"),
         }
     }
@@ -135,7 +151,7 @@ impl RuntimeModuleImportResolver {
     pub fn new() -> RuntimeModuleImportResolver {
         RuntimeModuleImportResolver {
             memory: RefCell::new(None),
-            max_memory: 16,
+            max_memory: 256,
         }
     }
 
@@ -163,6 +179,10 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
                 Signature::new(&[ValueType::I32; 2][..], None),
                 READ_FUNC_INDEX,
             ),
+            "new_uref" => FuncInstance::alloc_host(
+                Signature::new(&[ValueType::I32; 1][..], None),
+                NEW_FUNC_INDEX,
+            ),            
             _ => {
                 return Err(InterpreterError::Function(format!(
                     "host module doesn't export function with name {}",

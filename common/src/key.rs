@@ -19,4 +19,11 @@ impl Key {
             core::ptr::read(ptr)
         }
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        let ptr = self as *const Self;
+        let b_ptr = ptr as *const u8;
+        let size = core::mem::size_of::<Self>();
+        unsafe { core::slice::from_raw_parts(b_ptr, size) }
+    }
 }
