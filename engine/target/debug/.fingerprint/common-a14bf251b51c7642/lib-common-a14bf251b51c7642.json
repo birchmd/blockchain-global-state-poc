@@ -1,1 +1,0 @@
-{"rustc":7967243890966985561,"features":"[\"default\", \"std\"]","target":17033541960051820861,"profile":2664647938867034021,"path":7902361471277500893,"deps":[["wee_alloc v0.4.2","wee_alloc",13677743516624967836]],"local":[{"MtimeBased":[[1543368867,472594556],".fingerprint/common-a14bf251b51c7642/dep-lib-common-a14bf251b51c7642"]}],"rustflags":[],"edition":"Edition2018"}

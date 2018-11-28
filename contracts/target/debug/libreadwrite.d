@@ -1,1 +1,0 @@
-/home/birchmd/cpr-blockchain-poc/contracts/target/debug/libreadwrite.so: /home/birchmd/cpr-blockchain-poc/common/src/key.rs /home/birchmd/cpr-blockchain-poc/common/src/lib.rs /home/birchmd/cpr-blockchain-poc/common/src/value.rs /home/birchmd/cpr-blockchain-poc/contracts/src/lib.rs

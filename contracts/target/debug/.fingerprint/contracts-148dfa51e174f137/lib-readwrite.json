@@ -1,1 +1,0 @@
-{"rustc":7967243890966985561,"features":"[]","target":669300657754494725,"profile":16227186935280759576,"path":10872709659218687626,"deps":[["common v0.1.0 (/home/birchmd/cpr-blockchain-poc/common)","common",7511294838833598061]],"local":[{"MtimeBased":[[1543368357,908022950],".fingerprint/contracts-148dfa51e174f137/dep-lib-readwrite"]}],"rustflags":[],"edition":"Edition2015"}
