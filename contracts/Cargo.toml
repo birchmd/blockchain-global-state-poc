@@ -1,0 +1,11 @@
+[package]
+name = "contracts"
+version = "0.1.0"
+authors = ["Michael Birch <birchmd@casperlabs.io>"]
+
+[lib]
+name = "readwrite"
+crate-type = ["cdylib"]
+
+[dependencies]
+common = { path = "../common" }

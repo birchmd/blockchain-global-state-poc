@@ -1,0 +1,9 @@
+[package]
+name = "engine"
+version = "0.1.0"
+authors = ["Michael Birch <birchmd@casperlabs.io>"]
+
+[dependencies]
+wasmi = "0.4.2"
+storage = { path = "../storage" }
+common = { path = "../common", features = ["std"] }
