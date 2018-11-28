@@ -3,6 +3,7 @@ extern crate storage;
 extern crate wasmi;
 
 use self::common::key::Key;
+use self::common::memio::MemIO;
 use self::common::value::Value;
 use self::storage::{Error as StorageError, ExecutionEffect, GlobalState, TrackingCopy};
 use self::wasmi::memory_units::Pages;

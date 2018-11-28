@@ -9,6 +9,7 @@ extern crate wee_alloc;
 pub static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 pub mod key;
+pub mod memio;
 pub mod value;
 
 pub mod ext {

@@ -1,6 +1,7 @@
 use super::alloc::alloc::{Alloc, Global};
 use super::alloc::string::String;
 use super::key::Key;
+use super::memio::MemIO;
 use core::ops::Deref;
 
 #[repr(C)]
@@ -76,25 +77,9 @@ pub struct Account {
 
 use self::Value::*;
 
+impl MemIO for Value {}
+
 impl Value {
-    pub fn from_bytes(bytes: &[u8]) -> Value {
-        unsafe {
-            let ptr: *mut Value = Global.alloc_one().unwrap().as_ptr();
-            let b_ptr = ptr as *mut u8;
-            for i in 0..bytes.len() {
-                core::ptr::write(b_ptr.offset(i as isize), bytes[i])
-            }
-            core::ptr::read(ptr)
-        }
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        let ptr = self as *const Self;
-        let b_ptr = ptr as *const u8;
-        let size = core::mem::size_of::<Self>();
-        unsafe { core::slice::from_raw_parts(b_ptr, size) }
-    }
-
     pub fn type_string(&self) -> String {
         match self {
             Int32(_) => String::from("Int32"),
