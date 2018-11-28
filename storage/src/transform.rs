@@ -1,4 +1,4 @@
-use super::value::Value;
+use common::value::Value;
 use std::fmt;
 use std::ops::Add;
 
@@ -19,7 +19,7 @@ impl Transform {
             Add(i) => match v {
                 Value::Int32(j) => Ok(Value::Int32(i + j)),
                 other => {
-                    let expected = "Int32".to_string();
+                    let expected = String::from("Int32");
                     Err(super::Error::TypeMismatch {
                         expected,
                         found: other.type_string(),

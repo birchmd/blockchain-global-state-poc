@@ -1,20 +1,21 @@
+extern crate common;
+extern crate rand;
 extern crate wasmi;
 
 use self::wasmi::HostError;
+use rand::RngCore;
 use std::collections::HashMap;
 use std::fmt;
 
-pub mod key;
 pub mod op;
 pub mod transform;
 mod utils;
-pub mod value;
 
-use self::key::Key;
 use self::op::Op;
 use self::transform::Transform;
 use self::utils::add;
-use self::value::Value;
+use common::key::Key;
+use common::value::Value;
 
 #[derive(Debug)]
 pub enum Error {
@@ -37,12 +38,14 @@ pub trait GlobalState<T: TrackingCopy> {
     fn tracking_copy(&self) -> T;
 }
 
+#[derive(Debug)]
 pub enum ExecutionEffect {
     Success(HashMap<Key, Op>, HashMap<Key, Transform>),
     Error, //TODO: add better error reporting
 }
 
 pub trait TrackingCopy {
+    fn new_uref(&mut self) -> Key;
     fn read(&mut self, k: Key) -> Result<&Value, Error>;
     fn write(&mut self, k: Key, v: Value) -> Result<(), Error>;
     fn add(&mut self, k: Key, v: Value) -> Result<(), Error>;
@@ -66,7 +69,13 @@ impl GlobalState<InMemTC> for InMemGS {
     fn apply(&mut self, k: Key, t: Transform) -> Result<(), Error> {
         let maybe_curr = self.store.remove(&k);
         match maybe_curr {
-            None => Err(Error::KeyNotFound { key: k }),
+            None => match t {
+                Transform::Write(v) => {
+                    let _ = self.store.insert(k, v);
+                    Ok(())
+                },
+                _ => Err(Error::KeyNotFound { key: k }),
+            },
             Some(curr) => {
                 let new_value = t.apply(curr)?;
                 let _ = self.store.insert(k, new_value);
@@ -86,6 +95,7 @@ impl GlobalState<InMemTC> for InMemGS {
             ops: HashMap::new(),
             fns: HashMap::new(),
             failed: false,
+            rng: rand::thread_rng(),
         }
     }
 }
@@ -95,9 +105,16 @@ pub struct InMemTC {
     ops: HashMap<Key, Op>,
     fns: HashMap<Key, Transform>,
     failed: bool,
+    rng: rand::rngs::ThreadRng,
 }
 
 impl TrackingCopy for InMemTC {
+    fn new_uref(&mut self) -> Key {
+        let mut key = [0u8; 32];
+        self.rng.fill_bytes(&mut key);
+        Key::URef(key)
+    }
+
     fn read(&mut self, k: Key) -> Result<&Value, Error> {
         let maybe_value = self.store.get(&k);
         match maybe_value {
