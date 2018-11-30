@@ -1,0 +1,9 @@
+[package]
+name = "wasm_prep"
+version = "0.1.0"
+authors = ["Michael Birch <birchmd@casperlabs.io>"]
+
+[dependencies]
+clap = "2.32.0"
+parity-wasm = "0.31"
+pwasm-utils = "0.6"

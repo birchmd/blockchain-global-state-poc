@@ -20,7 +20,7 @@ fn load_wasm(path: &str) -> wasmi::Module {
 }
 
 fn main() {
-    let module = load_wasm("/home/birchmd/cpr-blockchain-poc/contracts/readwrite.wasm");
+    let module = load_wasm("../contracts/target/readwrite.wasm");
     let mut gs = storage::InMemGS::new();
     let account_addr = [0u8; 20];
     let account = Account::new([0u8; 32], 0, Array::new());
