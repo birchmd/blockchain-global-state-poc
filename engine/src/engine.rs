@@ -79,14 +79,28 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         Ok(Value::from_bytes(&bytes))
     }
 
+    fn kv_from_mem(&mut self, key_ptr: u32, value_ptr: u32) -> Result<(Key, Value), Error> {
+        let key = self.key_from_mem(key_ptr)?;
+        let value = self.value_from_mem(value_ptr)?;
+        Ok((key, value))
+    }
+
     pub fn write(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
         //args(0) = pointer to key in wasm memory
         //args(1) = pointer to value
         let key_ptr: u32 = args.nth_checked(0)?;
-        let key = self.key_from_mem(key_ptr)?;
         let value_ptr: u32 = args.nth_checked(1)?;
-        let value = self.value_from_mem(value_ptr)?;
+        let (key, value) = self.kv_from_mem(key_ptr, value_ptr)?;
         self.state.write(key, value).map_err(|e| e.into())
+    }
+
+    pub fn add(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
+        //args(0) = pointer to key in wasm memory
+        //args(1) = pointer to value
+        let key_ptr: u32 = args.nth_checked(0)?;
+        let value_ptr: u32 = args.nth_checked(1)?;
+        let (key, value) = self.kv_from_mem(key_ptr, value_ptr)?;
+        self.state.add(key, value).map_err(|e| e.into())
     }
 
     pub fn read(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
@@ -115,7 +129,8 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
 //TODO: add other functions
 const WRITE_FUNC_INDEX: usize = 0;
 const READ_FUNC_INDEX: usize = 1;
-const NEW_FUNC_INDEX: usize = 2;
+const ADD_FUNC_INDEX: usize = 2;
+const NEW_FUNC_INDEX: usize = 3;
 
 impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
     fn invoke_index(
@@ -134,6 +149,11 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
                 Ok(None)
             }
 
+            ADD_FUNC_INDEX => {
+                let _ = self.add(args)?;
+                Ok(None)
+            }
+            
             NEW_FUNC_INDEX => {
                 let _ = self.new_uref(args)?;
                 Ok(None)
@@ -180,10 +200,14 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
                 Signature::new(&[ValueType::I32; 2][..], None),
                 READ_FUNC_INDEX,
             ),
+            "add" => FuncInstance::alloc_host(
+                Signature::new(&[ValueType::I32; 2][..], None),
+                ADD_FUNC_INDEX,
+            ),
             "new_uref" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 1][..], None),
                 NEW_FUNC_INDEX,
-            ),            
+            ),
             _ => {
                 return Err(InterpreterError::Function(format!(
                     "host module doesn't export function with name {}",

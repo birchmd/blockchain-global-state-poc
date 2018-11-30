@@ -16,6 +16,7 @@ mod ext_ffi {
     extern "C" {
         pub fn read(key_ptr: *const u8, value_ptr: *mut u8);
         pub fn write(key_ptr: *const u8, value_ptr: *const u8);
+        pub fn add(key_ptr: *const u8, value_ptr: *const u8);
         pub fn new_uref(key_ptr: *mut u8);
     }
 }
@@ -43,6 +44,14 @@ pub mod ext {
         }
     }
 
+    pub fn add(key: &Key, value: &Value) {
+        let key_ptr = key as *const Key;
+        let value_ptr = value as *const Value;
+        unsafe {
+            ext_ffi::add(key_ptr as *const u8, value_ptr as *const u8);
+        }
+    }
+    
     pub fn new_uref() -> Key {
         let key_ptr: *mut Key = Global.alloc_one().unwrap().as_ptr();
         unsafe {
