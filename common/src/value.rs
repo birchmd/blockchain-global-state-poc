@@ -1,83 +1,112 @@
-use super::alloc::alloc::{Alloc, Global};
-use super::alloc::string::String;
+use super::alloc::string::{self, String};
+use super::alloc::vec::Vec;
 use super::key::Key;
-use super::memio::MemIO;
-use core::ops::Deref;
+use super::bytesrepr::{BytesRepr, Error};
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct Array<T> {
-    elems: *mut T,
-    pub size: usize,
-}
-impl<T> Array<T> {
-    pub fn new() -> Self {
-        let ptr: *mut T = Global.alloc_array(1).unwrap().as_ptr();
-        Array {
-            elems: ptr,
-            size: 0,
-        }
-    }
-}
-impl<T> Deref for Array<T> {
-    type Target = [T];
-    fn deref(&self) -> &[T] {
-        unsafe { core::slice::from_raw_parts(self.elems, self.size) }
-    }
-}
-
-impl<T: PartialEq> PartialEq for Array<T> {
-    fn eq(&self, other: &Array<T>) -> bool {
-        if self.size != other.size {
-            false
-        } else {
-            self.iter().zip(other.iter()).all(|(x, y)| x == y)
-        }
-    }
-}
-impl<T: Eq> Eq for Array<T> {}
-impl<T: Clone> Clone for Array<T> {
-    fn clone(&self) -> Self {
-        unsafe {
-            let size = if self.size <= 0 { 1 } else { self.size };
-            let ptr: *mut T = Global.alloc_array(size).unwrap().as_ptr();
-
-            for i in 0..self.size {
-                let t: T = (*self.elems.offset(i as isize)).clone();
-                core::ptr::write(ptr.offset(i as isize), t);
-            }
-
-            Array {
-                elems: ptr,
-                size: self.size,
-            }
-        }
-    }
-}
-
-pub type CharArray = Array<u8>; //ascii-encoded string
-
-#[repr(C)]
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Value {
     Int32(i32),
-    ByteArray(Array<u8>),
-    ListInt32(Array<i32>),
-    String(CharArray),
+    ByteArray(Vec<u8>),
+    ListInt32(Vec<i32>),
+    String(string::String),
     Acct(Account),
 }
 
-#[repr(C)]
+const INT32_ID: u8 = 0;
+const BYTEARRAY_ID: u8 = 1;
+const LISTINT32_ID: u8 = 2;
+const STRING_ID: u8 = 3;
+const ACCT_ID: u8 = 4;
+
+use self::Value::*;
+
+impl BytesRepr for Value {
+    fn to_bytes(&self) -> Vec<u8>  {
+        match self {
+            Int32(i) => {
+                let mut result = Vec::with_capacity(5);
+                result.push(INT32_ID);
+                result.extend(i.to_bytes());
+                result
+            }
+
+            ByteArray(arr) => {
+                let mut result = Vec::new();
+                result.push(BYTEARRAY_ID);
+                result.extend(arr.to_bytes());
+                result
+            }
+            ListInt32(arr) => {
+                let mut result = Vec::new();
+                result.push(LISTINT32_ID);
+                result.extend(arr.to_bytes());
+                result
+            }
+            String(s) => {
+                let mut result = Vec::new();
+                result.push(STRING_ID);
+                result.extend(s.to_bytes());
+                result
+            }
+            Acct(a) => {
+                let mut result = Vec::new();
+                result.push(ACCT_ID);
+                result.extend(a.to_bytes());
+                result
+            }
+        }
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (id, rest): (u8, &[u8]) = BytesRepr::from_bytes(bytes)?;
+        match id {
+            INT32_ID => {
+                let (i, rem): (i32, &[u8]) = BytesRepr::from_bytes(rest)?;
+                Ok((Int32(i), rem))
+            }
+            BYTEARRAY_ID => {
+                let (arr, rem): (Vec<u8>, &[u8]) = BytesRepr::from_bytes(rest)?;
+                Ok((ByteArray(arr), rem))
+            }
+            LISTINT32_ID => {
+                let (arr, rem): (Vec<i32>, &[u8]) = BytesRepr::from_bytes(rest)?;
+                Ok((ListInt32(arr), rem))
+            }
+            STRING_ID => {
+                let (s, rem): (String, &[u8]) = BytesRepr::from_bytes(rest)?;
+                Ok((String(s), rem))
+            }
+            ACCT_ID => {
+                let (a, rem): (Account, &[u8]) = BytesRepr::from_bytes(rest)?;
+                Ok((Acct(a), rem))
+            }
+            _ => Err(Error::FormattingError),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Account {
     public_key: [u8; 32],
     nonce: u64,
-    known_urefs: Array<Key>,
+    known_urefs: Vec<Key>,
 }
 
-use self::Value::*;
-
-impl MemIO for Value {}
+impl BytesRepr for Account {
+    fn to_bytes(&self) -> Vec<u8>  {
+        let mut result = Vec::new();
+        result.extend(&self.public_key);
+        result.extend(self.nonce.to_bytes());
+        result.extend(self.known_urefs.to_bytes());
+        result
+    }
+    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (public_key, rem1): ([u8; 32], &[u8]) = BytesRepr::from_bytes(bytes)?;
+        let (nonce, rem2): (u64, &[u8]) = BytesRepr::from_bytes(rem1)?;
+        let (known_urefs, rem3): (Vec<Key>, &[u8]) = BytesRepr::from_bytes(rem2)?;
+        Ok((Account{public_key, nonce, known_urefs}, rem3))
+    }
+}
 
 impl Value {
     pub fn type_string(&self) -> String {
@@ -99,7 +128,7 @@ impl Value {
 }
 
 impl Account {
-    pub fn new(public_key: [u8; 32], nonce: u64, known_urefs: Array<Key>) -> Account {
+    pub fn new(public_key: [u8; 32], nonce: u64, known_urefs: Vec<Key>) -> Account {
         Account {
             public_key,
             nonce,

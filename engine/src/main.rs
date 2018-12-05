@@ -3,7 +3,7 @@ extern crate storage;
 extern crate wasmi;
 
 use common::key::Key;
-use common::value::{Account, Array, Value};
+use common::value::{Account, Value};
 use storage::transform::Transform;
 use storage::GlobalState;
 
@@ -23,7 +23,7 @@ fn main() {
     let module = load_wasm("../contracts/target/readwrite.wasm");
     let mut gs = storage::InMemGS::new();
     let account_addr = [0u8; 20];
-    let account = Account::new([0u8; 32], 0, Array::new());
+    let account = Account::new([0u8; 32], 0, Vec::new());
     let transform = Transform::Write(Value::Acct(account));
     gs.apply(Key::Account(account_addr), transform).unwrap();
     

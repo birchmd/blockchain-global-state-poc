@@ -9,14 +9,15 @@ extern crate wee_alloc;
 pub static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 pub mod key;
-pub mod memio;
+pub mod bytesrepr;
 pub mod value;
 
 mod ext_ffi {
     extern "C" {
-        pub fn read(key_ptr: *const u8, value_ptr: *mut u8);
-        pub fn write(key_ptr: *const u8, value_ptr: *const u8);
-        pub fn add(key_ptr: *const u8, value_ptr: *const u8);
+        pub fn size_of_value(key_ptr: *const u8, key_size: usize) -> usize;
+        pub fn read(key_ptr: *const u8, key_size: usize, value_ptr: *mut u8, value_size: usize);
+        pub fn write(key_ptr: *const u8, key_size: usize, value_ptr: *const u8, value_size: usize);
+        pub fn add(key_ptr: *const u8, key_size: usize, value_ptr: *const u8, value_size: usize);
         pub fn new_uref(key_ptr: *mut u8);
     }
 }
@@ -24,40 +25,58 @@ mod ext_ffi {
 pub mod ext {
     use super::alloc::alloc::{Alloc, Global};
     use super::ext_ffi;
-    use crate::key::Key;
+    use crate::key::{Key, UREF_SIZE};
+    use crate::bytesrepr::BytesRepr;
     use crate::value::Value;
 
+    fn alloc_bytes(n: usize) -> *mut u8 {
+        Global.alloc_array(n).unwrap().as_ptr()
+    }
+
     pub fn read(key: &Key) -> Value {
-        let key_ptr = key as *const Key;
-        let value_ptr: *mut Value = Global.alloc_one().unwrap().as_ptr();
-        unsafe {
-            ext_ffi::read(key_ptr as *const u8, value_ptr as *mut u8);
-            core::ptr::read(value_ptr)
-        }
+        let key_bytes = key.to_bytes();
+        let key_ptr = key_bytes.as_ptr();
+        let key_size = key_bytes.len();
+        let value_size = unsafe { ext_ffi::size_of_value(key_ptr, key_size) };
+        let value_ptr = alloc_bytes(value_size);
+        let value_bytes = unsafe {
+            ext_ffi::read(key_ptr, key_size, value_ptr, value_size);
+            core::slice::from_raw_parts(value_ptr, value_size)
+        };
+        Value::from_bytes(value_bytes).unwrap().0
     }
 
     pub fn write(key: &Key, value: &Value) {
-        let key_ptr = key as *const Key;
-        let value_ptr = value as *const Value;
+        let key_bytes = key.to_bytes();
+        let key_ptr = key_bytes.as_ptr();
+        let key_size = key_bytes.len();
+        let value_bytes = value.to_bytes();
+        let value_ptr = value_bytes.as_ptr();
+        let value_size = value_bytes.len();
         unsafe {
-            ext_ffi::write(key_ptr as *const u8, value_ptr as *const u8);
+            ext_ffi::write(key_ptr, key_size, value_ptr, value_size);
         }
     }
 
     pub fn add(key: &Key, value: &Value) {
-        let key_ptr = key as *const Key;
-        let value_ptr = value as *const Value;
+        let key_bytes = key.to_bytes();
+        let key_ptr = key_bytes.as_ptr();
+        let key_size = key_bytes.len();
+        let value_bytes = value.to_bytes();
+        let value_ptr = value_bytes.as_ptr();
+        let value_size = value_bytes.len();
         unsafe {
-            ext_ffi::add(key_ptr as *const u8, value_ptr as *const u8);
+            ext_ffi::add(key_ptr, key_size, value_ptr, value_size);
         }
     }
-    
+
     pub fn new_uref() -> Key {
-        let key_ptr: *mut Key = Global.alloc_one().unwrap().as_ptr();
-        unsafe {
-            ext_ffi::new_uref(key_ptr as *mut u8);
-            core::ptr::read(key_ptr)
-        }
+        let key_ptr = alloc_bytes(UREF_SIZE);
+        let slice = unsafe {
+            ext_ffi::new_uref(key_ptr);
+            core::slice::from_raw_parts(key_ptr, UREF_SIZE)
+        };
+        Key::from_bytes(slice).unwrap().0
     }
 }
 

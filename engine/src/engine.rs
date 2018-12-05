@@ -2,8 +2,8 @@ extern crate common;
 extern crate storage;
 extern crate wasmi;
 
+use self::common::bytesrepr::{BytesRepr, deserialize, Error as BytesReprError};
 use self::common::key::Key;
-use self::common::memio::MemIO;
 use self::common::value::Value;
 use self::storage::{Error as StorageError, ExecutionEffect, GlobalState, TrackingCopy};
 use self::wasmi::memory_units::Pages;
@@ -21,6 +21,7 @@ use std::fmt;
 pub enum Error {
     Interpreter(InterpreterError),
     Storage(StorageError),
+    BytesRepr(BytesReprError),
     ValueTypeSizeMismatch { value_type: u32, value_size: usize },
     ForgedReference(Key),
     NoImportedMemory,
@@ -44,6 +45,12 @@ impl From<StorageError> for Error {
     }
 }
 
+impl From<BytesReprError> for Error {
+    fn from(e: BytesReprError) -> Self {
+        Error::BytesRepr(e)
+    }
+}
+
 impl HostError for Error {}
 
 pub struct Runtime<'a, T: TrackingCopy + 'a> {
@@ -57,61 +64,77 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         self.state.effect()
     }
 
-    fn key_from_mem(&mut self, key_ptr: u32) -> Result<Key, Error> {
-        let size = std::mem::size_of::<Key>();
-        let bytes = self.memory.get(key_ptr, size)?;
-        let key = Key::from_bytes(&bytes);
-        match key {
-            k @ Key::URef(_) => {
-                if self.known_urefs.contains(&k) {
-                    Ok(k)
-                } else {
-                    Err(Error::ForgedReference(k))
-                }
-            }
-            other => Ok(other),
-        }
+    fn key_from_mem(&mut self, key_ptr: u32, key_size: u32) -> Result<Key, Error> {
+        let bytes = self.memory.get(key_ptr, key_size as usize)?;
+        deserialize(&bytes).map_err(|e| e.into())
+    }
+    
+    fn value_from_mem(&mut self, value_ptr: u32, value_size: u32) -> Result<Value, Error> {
+        let bytes = self.memory.get(value_ptr, value_size as usize)?;
+        deserialize(&bytes).map_err(|e| e.into())
     }
 
-    fn value_from_mem(&mut self, value_ptr: u32) -> Result<Value, Error> {
-        let size = std::mem::size_of::<Value>();
-        let bytes = self.memory.get(value_ptr, size)?;
-        Ok(Value::from_bytes(&bytes))
-    }
-
-    fn kv_from_mem(&mut self, key_ptr: u32, value_ptr: u32) -> Result<(Key, Value), Error> {
-        let key = self.key_from_mem(key_ptr)?;
-        let value = self.value_from_mem(value_ptr)?;
+    fn kv_from_mem(&mut self, key_ptr: u32, key_size: u32, value_ptr: u32, value_size: u32) -> Result<(Key, Value), Error> {
+        let key = self.key_from_mem(key_ptr, key_size)?;
+        let value = self.value_from_mem(value_ptr, value_size)?;
         Ok((key, value))
     }
 
     pub fn write(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
         //args(0) = pointer to key in wasm memory
-        //args(1) = pointer to value
+        //args(1) = size of key
+        //args(2) = pointer to value
+        //args(3) = size of value
         let key_ptr: u32 = args.nth_checked(0)?;
-        let value_ptr: u32 = args.nth_checked(1)?;
-        let (key, value) = self.kv_from_mem(key_ptr, value_ptr)?;
+        let key_size: u32 = args.nth_checked(1)?;
+        let value_ptr: u32 = args.nth_checked(2)?;
+        let value_size: u32 = args.nth_checked(3)?;
+        let (key, value) = self.kv_from_mem(key_ptr, key_size, value_ptr, value_size)?;
         self.state.write(key, value).map_err(|e| e.into())
     }
 
     pub fn add(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
         //args(0) = pointer to key in wasm memory
-        //args(1) = pointer to value
+        //args(1) = size of key
+        //args(2) = pointer to value
+        //args(3) = size of value
         let key_ptr: u32 = args.nth_checked(0)?;
-        let value_ptr: u32 = args.nth_checked(1)?;
-        let (key, value) = self.kv_from_mem(key_ptr, value_ptr)?;
+        let key_size: u32 = args.nth_checked(1)?;
+        let value_ptr: u32 = args.nth_checked(2)?;
+        let value_size: u32 = args.nth_checked(3)?;
+        let (key, value) = self.kv_from_mem(key_ptr, key_size, value_ptr, value_size)?;
         self.state.add(key, value).map_err(|e| e.into())
     }
 
+    fn value_from_key(&mut self, key_ptr: u32, key_size: u32) -> Result<&Value, Trap> {
+        let key = self.key_from_mem(key_ptr, key_size)?;
+        self.state.read(key).map_err(|e| e.into())
+    }
+
+    pub fn size_of_value(&mut self, args: RuntimeArgs) -> Result<usize, Trap> {
+        //args(0) = pointer to key in wasm memory
+        //args(1) = size of key in wasm memory
+        let key_ptr: u32 = args.nth_checked(0)?;
+        let key_size: u32 = args.nth_checked(1)?;
+        let value = self.value_from_key(key_ptr, key_size)?;
+        let value_bytes = value.to_bytes();
+        Ok(value_bytes.len())
+    }
+    
     pub fn read(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
         //args(0) = pointer to key in wasm memory
-        //args(1) = value destination pointer
+        //args(1) = size of key in wasm memory
+        //args(2) = value destination pointer
+        //args(3) = size of value
         let key_ptr: u32 = args.nth_checked(0)?;
-        let key = self.key_from_mem(key_ptr)?;
-        let value = self.state.read(key)?;
-        let value_ptr: u32 = args.nth_checked(1)?;
+        let key_size: u32 = args.nth_checked(1)?;
+        let value_bytes = {
+            let value = self.value_from_key(key_ptr, key_size)?;
+            value.to_bytes()
+        };
+        let value_ptr: u32 = args.nth_checked(2)?;
         self.memory
-            .set(value_ptr, value.as_bytes())
+            .set(value_ptr, &value_bytes)
             .map_err(|e| Error::Interpreter(e).into())
     }
 
@@ -121,7 +144,7 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         let key = self.state.new_uref();
         self.known_urefs.insert(key);
         self.memory
-            .set(key_ptr, key.as_bytes())
+            .set(key_ptr, &key.to_bytes())
             .map_err(|e| Error::Interpreter(e).into())
     }
 }
@@ -131,6 +154,7 @@ const WRITE_FUNC_INDEX: usize = 0;
 const READ_FUNC_INDEX: usize = 1;
 const ADD_FUNC_INDEX: usize = 2;
 const NEW_FUNC_INDEX: usize = 3;
+const SIZE_FUNC_INDEX: usize = 4;
 
 impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
     fn invoke_index(
@@ -139,8 +163,23 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
         args: RuntimeArgs,
     ) -> Result<Option<RuntimeValue>, Trap> {
         match index {
+            SIZE_FUNC_INDEX => {
+                let size = self.size_of_value(args)?;
+                Ok(Some(RuntimeValue::I32(size as i32)))
+            }
+            
             WRITE_FUNC_INDEX => {
                 let _ = self.write(args)?;
+                Ok(None)
+            }
+
+            ADD_FUNC_INDEX => {
+                let _ = self.add(args)?;
+                Ok(None)
+            }
+
+            NEW_FUNC_INDEX => {
+                let _ = self.new_uref(args)?;
                 Ok(None)
             }
 
@@ -149,15 +188,6 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
                 Ok(None)
             }
 
-            ADD_FUNC_INDEX => {
-                let _ = self.add(args)?;
-                Ok(None)
-            }
-            
-            NEW_FUNC_INDEX => {
-                let _ = self.new_uref(args)?;
-                Ok(None)
-            }
             _ => panic!("unknown function index"),
         }
     }
@@ -192,16 +222,20 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
         _signature: &Signature,
     ) -> Result<FuncRef, InterpreterError> {
         let func_ref = match field_name {
+            "size_of_value" => FuncInstance::alloc_host(
+                Signature::new(&[ValueType::I32; 2][..], Some(ValueType::I32)),
+                SIZE_FUNC_INDEX,
+            ),
             "write" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32; 2][..], None),
+                Signature::new(&[ValueType::I32; 4][..], None),
                 WRITE_FUNC_INDEX,
             ),
             "read" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32; 2][..], None),
+                Signature::new(&[ValueType::I32; 4][..], None),
                 READ_FUNC_INDEX,
             ),
             "add" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32; 2][..], None),
+                Signature::new(&[ValueType::I32; 4][..], None),
                 ADD_FUNC_INDEX,
             ),
             "new_uref" => FuncInstance::alloc_host(
