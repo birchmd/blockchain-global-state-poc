@@ -33,10 +33,15 @@ pub mod ext {
         Global.alloc_array(n).unwrap().as_ptr()
     }
 
+    fn to_ptr<T: BytesRepr>(t: &T) -> (*const u8, usize) {
+        let bytes = t.to_bytes();
+        let ptr = bytes.as_ptr();
+        let size = bytes.len();
+        (ptr, size)
+    }
+    
     pub fn read(key: &Key) -> Value {
-        let key_bytes = key.to_bytes();
-        let key_ptr = key_bytes.as_ptr();
-        let key_size = key_bytes.len();
+        let (key_ptr, key_size) = to_ptr(key);
         let value_size = unsafe { ext_ffi::size_of_value(key_ptr, key_size) };
         let value_ptr = alloc_bytes(value_size);
         let value_bytes = unsafe {
@@ -47,24 +52,16 @@ pub mod ext {
     }
 
     pub fn write(key: &Key, value: &Value) {
-        let key_bytes = key.to_bytes();
-        let key_ptr = key_bytes.as_ptr();
-        let key_size = key_bytes.len();
-        let value_bytes = value.to_bytes();
-        let value_ptr = value_bytes.as_ptr();
-        let value_size = value_bytes.len();
+        let (key_ptr, key_size) = to_ptr(key);
+        let (value_ptr, value_size) = to_ptr(value);
         unsafe {
             ext_ffi::write(key_ptr, key_size, value_ptr, value_size);
         }
     }
 
     pub fn add(key: &Key, value: &Value) {
-        let key_bytes = key.to_bytes();
-        let key_ptr = key_bytes.as_ptr();
-        let key_size = key_bytes.len();
-        let value_bytes = value.to_bytes();
-        let value_ptr = value_bytes.as_ptr();
-        let value_size = value_bytes.len();
+        let (key_ptr, key_size) = to_ptr(key);
+        let (value_ptr, value_size) = to_ptr(value);
         unsafe {
             ext_ffi::add(key_ptr, key_size, value_ptr, value_size);
         }
