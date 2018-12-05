@@ -87,9 +87,9 @@ impl BytesRepr for Value {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Account {
-    pub public_key: [u8; 32],
-    pub nonce: u64,
-    pub known_urefs: Vec<Key>,
+    public_key: [u8; 32],
+    nonce: u64,
+    known_urefs: Vec<Key>,
 }
 
 impl BytesRepr for Account {

@@ -52,7 +52,7 @@ impl BytesRepr for i32 {
     fn to_bytes(&self) -> Vec<u8> {
         let mut buf = [0u8; 4];
         LittleEndian::write_i32(&mut buf, *self);
-        let mut result: Vec<u8> = Vec::new();
+        let mut result: Vec<u8> = Vec::with_capacity(4);
         result.extend_from_slice(&buf);
         result
     }
@@ -67,7 +67,7 @@ impl BytesRepr for u32 {
     fn to_bytes(&self) -> Vec<u8> {
         let mut buf = [0u8; 4];
         LittleEndian::write_u32(&mut buf, *self);
-        let mut result: Vec<u8> = Vec::new();
+        let mut result: Vec<u8> = Vec::with_capacity(4);
         result.extend_from_slice(&buf);
         result
     }
@@ -82,7 +82,7 @@ impl BytesRepr for u64 {
     fn to_bytes(&self) -> Vec<u8> {
         let mut buf = [0u8; 8];
         LittleEndian::write_u64(&mut buf, *self);
-        let mut result: Vec<u8> = Vec::new();
+        let mut result: Vec<u8> = Vec::with_capacity(8);
         result.extend_from_slice(&buf);
         result
     }
@@ -138,7 +138,8 @@ impl BytesRepr for String {
     fn to_bytes(&self) -> Vec<u8> {
         let bytes = self.as_bytes();
         let size = self.len();
-        let mut result = Vec::with_capacity(size);
+        let mut result = Vec::with_capacity(size + 4);
+        result.extend((size as u32).to_bytes());
         result.extend(bytes);
         result
     }
