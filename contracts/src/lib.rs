@@ -9,7 +9,7 @@ use common::ext::*;
 use common::value::Value;
 
 #[no_mangle]
-pub extern fn call() {
+pub extern "C" fn call() {
     let x = 1234;
     let y = 8910;
     let x_key = new_uref();

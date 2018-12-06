@@ -26,7 +26,7 @@ fn main() {
     let account = Account::new([0u8; 32], 0, Vec::new());
     let transform = Transform::Write(Value::Acct(account));
     gs.apply(Key::Account(account_addr), transform).unwrap();
-    
+
     let result = engine::exec(module, account_addr, &gs);
 
     println!("Result is {:?}", result);

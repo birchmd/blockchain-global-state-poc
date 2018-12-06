@@ -2,7 +2,7 @@ extern crate common;
 extern crate storage;
 extern crate wasmi;
 
-use self::common::bytesrepr::{BytesRepr, deserialize, Error as BytesReprError};
+use self::common::bytesrepr::{deserialize, BytesRepr, Error as BytesReprError};
 use self::common::key::Key;
 use self::common::value::Value;
 use self::storage::{Error as StorageError, ExecutionEffect, GlobalState, TrackingCopy};
@@ -68,13 +68,19 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         let bytes = self.memory.get(key_ptr, key_size as usize)?;
         deserialize(&bytes).map_err(|e| e.into())
     }
-    
+
     fn value_from_mem(&mut self, value_ptr: u32, value_size: u32) -> Result<Value, Error> {
         let bytes = self.memory.get(value_ptr, value_size as usize)?;
         deserialize(&bytes).map_err(|e| e.into())
     }
 
-    fn kv_from_mem(&mut self, key_ptr: u32, key_size: u32, value_ptr: u32, value_size: u32) -> Result<(Key, Value), Error> {
+    fn kv_from_mem(
+        &mut self,
+        key_ptr: u32,
+        key_size: u32,
+        value_ptr: u32,
+        value_size: u32,
+    ) -> Result<(Key, Value), Error> {
         let key = self.key_from_mem(key_ptr, key_size)?;
         let value = self.value_from_mem(value_ptr, value_size)?;
         Ok((key, value))
@@ -120,7 +126,7 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         let value_bytes = value.to_bytes();
         Ok(value_bytes.len())
     }
-    
+
     pub fn read(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
         //args(0) = pointer to key in wasm memory
         //args(1) = size of key in wasm memory
@@ -167,7 +173,7 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
                 let size = self.size_of_value(args)?;
                 Ok(Some(RuntimeValue::I32(size as i32)))
             }
-            
+
             WRITE_FUNC_INDEX => {
                 let _ = self.write(args)?;
                 Ok(None)

@@ -8,8 +8,8 @@ extern crate wee_alloc;
 #[global_allocator]
 pub static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-pub mod key;
 pub mod bytesrepr;
+pub mod key;
 pub mod value;
 
 mod ext_ffi {
@@ -20,17 +20,22 @@ mod ext_ffi {
         pub fn add(key_ptr: *const u8, key_size: usize, value_ptr: *const u8, value_size: usize);
         pub fn new_uref(key_ptr: *mut u8);
         pub fn function_size(name_ptr: *const u8, name_size: usize) -> usize;
-        pub fn function_bytes(name_ptr: *const u8, name_size: usize, dest_ptr: *mut u8, dest_size: usize);
+        pub fn function_bytes(
+            name_ptr: *const u8,
+            name_size: usize,
+            dest_ptr: *mut u8,
+            dest_size: usize,
+        );
     }
 }
 
 pub mod ext {
     use super::alloc::alloc::{Alloc, Global};
-    use super::ext_ffi;
     use super::alloc::string::String;
     use super::alloc::vec::Vec;
-    use crate::key::{Key, UREF_SIZE};
+    use super::ext_ffi;
     use crate::bytesrepr::BytesRepr;
+    use crate::key::{Key, UREF_SIZE};
     use crate::value::Value;
 
     fn alloc_bytes(n: usize) -> *mut u8 {
@@ -43,7 +48,7 @@ pub mod ext {
         let size = bytes.len();
         (ptr, size)
     }
-    
+
     pub fn read(key: &Key) -> Value {
         let (key_ptr, key_size) = to_ptr(key);
         let value_size = unsafe { ext_ffi::size_of_value(key_ptr, key_size) };

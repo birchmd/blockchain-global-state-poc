@@ -73,7 +73,7 @@ impl GlobalState<InMemTC> for InMemGS {
                 Transform::Write(v) => {
                     let _ = self.store.insert(k, v);
                     Ok(())
-                },
+                }
                 _ => Err(Error::KeyNotFound { key: k }),
             },
             Some(curr) => {

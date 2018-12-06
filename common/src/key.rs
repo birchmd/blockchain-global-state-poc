@@ -40,7 +40,7 @@ impl BytesRepr for Key {
             }
         }
     }
-    
+
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (id, rest): (u8, &[u8]) = BytesRepr::from_bytes(bytes)?;
         match id {
