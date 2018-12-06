@@ -18,6 +18,7 @@ const BYTEARRAY_ID: u8 = 1;
 const LISTINT32_ID: u8 = 2;
 const STRING_ID: u8 = 3;
 const ACCT_ID: u8 = 4;
+const CONTRACT_ID: u8 = 5;
 
 use self::Value::*;
 
@@ -57,7 +58,7 @@ impl BytesRepr for Value {
             }
             Contract(arr) => {
                 let mut result = Vec::new();
-                result.push(BYTEARRAY_ID);
+                result.push(CONTRACT_ID);
                 result.extend(arr.to_bytes());
                 result
             }
@@ -86,6 +87,10 @@ impl BytesRepr for Value {
             ACCT_ID => {
                 let (a, rem): (Account, &[u8]) = BytesRepr::from_bytes(rest)?;
                 Ok((Acct(a), rem))
+            }
+            CONTRACT_ID => {
+                let (arr, rem): (Vec<u8>, &[u8]) = BytesRepr::from_bytes(rest)?;
+                Ok((Contract(arr), rem))
             }
             _ => Err(Error::FormattingError),
         }

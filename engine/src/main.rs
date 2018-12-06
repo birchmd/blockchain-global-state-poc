@@ -1,22 +1,24 @@
 extern crate common;
 extern crate storage;
 extern crate wasmi;
+extern crate parity_wasm;
 
 use common::key::Key;
 use common::value::{Account, Value};
 use storage::transform::Transform;
 use storage::GlobalState;
+use parity_wasm::elements::{deserialize_buffer, Module};
 
 pub mod engine;
 
 use std::fs::File;
 
-fn load_wasm(path: &str) -> wasmi::Module {
+fn load_wasm(path: &str) -> Module {
     use std::io::prelude::*;
     let mut file = File::open(path).unwrap();
     let mut wasm_buf = Vec::new();
     file.read_to_end(&mut wasm_buf).unwrap();
-    wasmi::Module::from_buffer(&wasm_buf).unwrap()
+    deserialize_buffer(&wasm_buf).unwrap()
 }
 
 fn main() {

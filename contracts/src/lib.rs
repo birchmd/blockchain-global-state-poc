@@ -3,10 +3,16 @@
 
 #[macro_use]
 extern crate alloc;
+use alloc::string::String;
 
 extern crate common;
 use common::ext::*;
 use common::value::Value;
+
+#[no_mangle]
+pub extern "C" fn plus_one(x: i32) -> i32 {
+	x + 1
+}
 
 #[no_mangle]
 pub extern "C" fn call() {
@@ -23,4 +29,7 @@ pub extern "C" fn call() {
     write(&x_key, &s);
     let s_read = read(&x_key);
     assert_eq!(s, s_read);
+
+	let export_name = String::from("plus_one");
+	let _ = store_function(&export_name);
 }

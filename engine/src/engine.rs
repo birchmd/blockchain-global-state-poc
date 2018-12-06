@@ -1,18 +1,15 @@
-extern crate common;
-extern crate storage;
-extern crate wasmi;
-
-use self::common::bytesrepr::{deserialize, BytesRepr, Error as BytesReprError};
-use self::common::key::Key;
-use self::common::value::Value;
-use self::storage::{Error as StorageError, ExecutionEffect, GlobalState, TrackingCopy};
-use self::wasmi::memory_units::Pages;
-use self::wasmi::{
+use common::bytesrepr::{deserialize, BytesRepr, Error as BytesReprError};
+use common::key::Key;
+use common::value::Value;
+use storage::{Error as StorageError, ExecutionEffect, GlobalState, TrackingCopy};
+use wasmi::memory_units::Pages;
+use wasmi::{
     Error as InterpreterError, Externals, FuncInstance, FuncRef, HostError, ImportsBuilder,
     MemoryDescriptor, MemoryInstance, MemoryRef, ModuleImportResolver, ModuleInstance, RuntimeArgs,
     RuntimeValue, Signature, Trap, ValueType,
 };
 
+use parity_wasm::elements::{Error as ParityWasmError, Internal, Module};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt;
@@ -25,6 +22,8 @@ pub enum Error {
     ValueTypeSizeMismatch { value_type: u32, value_size: usize },
     ForgedReference(Key),
     NoImportedMemory,
+    FunctionNotFound(String),
+    ParityWasm(ParityWasmError),
 }
 
 impl fmt::Display for Error {
@@ -57,6 +56,7 @@ pub struct Runtime<'a, T: TrackingCopy + 'a> {
     memory: MemoryRef,
     known_urefs: HashSet<Key>,
     state: &'a mut T,
+    module: Module,
 }
 
 impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
@@ -74,6 +74,40 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         deserialize(&bytes).map_err(|e| e.into())
     }
 
+    fn name_from_mem(&mut self, name_ptr: u32, name_size: u32) -> Result<String, Trap> {
+        let bytes = self
+            .memory
+            .get(name_ptr, name_size as usize)
+            .map_err(|e| Error::Interpreter(e))?;
+        deserialize(&bytes).map_err(|e| Error::BytesRepr(e).into())
+    }
+
+    fn function_from_name(&mut self, name_ptr: u32, name_size: u32) -> Result<Vec<u8>, Trap> {
+        let name = self.name_from_mem(name_ptr, name_size)?;
+
+        let maybe_fn_index = self.module.export_section().and_then(|es| {
+            es.entries()
+                .iter()
+                .find(|e| e.field() == name)
+                .and_then(|e| match e.internal() {
+                    Internal::Function(index) => Some(*index),
+                    _ => None,
+                })
+        });
+
+        let maybe_fn_body = maybe_fn_index.and_then(|fn_index| {
+            self.module
+                .code_section()
+                .map(|cs| cs.bodies()[fn_index as usize].clone())
+        });
+
+        let fn_body = maybe_fn_body.ok_or_else(|| Error::FunctionNotFound(name))?;
+        //FIXME: returning the serialized body doesn't really help; we probably
+        //need to return an entire serialzied module, or at the very least close
+        //the function over other calls it makes.
+        parity_wasm::serialize(fn_body).map_err(|e| Error::ParityWasm(e).into())
+    }
+
     fn kv_from_mem(
         &mut self,
         key_ptr: u32,
@@ -84,6 +118,29 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         let key = self.key_from_mem(key_ptr, key_size)?;
         let value = self.value_from_mem(value_ptr, value_size)?;
         Ok((key, value))
+    }
+
+    pub fn function_size(&mut self, args: RuntimeArgs) -> Result<usize, Trap> {
+        //args(0) = pointer to name in wasm memory
+        //args(1) = size of name in wasm memory
+        let name_ptr: u32 = args.nth_checked(0)?;
+        let name_size: u32 = args.nth_checked(1)?;
+        let fn_bytes = self.function_from_name(name_ptr, name_size)?;
+        Ok(fn_bytes.len())
+    }
+
+    pub fn function_bytes(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
+        //args(0) = pointer to name in wasm memory
+        //args(1) = size of name
+        //args(2) = pointer to fn dest
+        //args(3) = size of fn dest
+        let name_ptr: u32 = args.nth_checked(0)?;
+        let name_size: u32 = args.nth_checked(1)?;
+        let dest_ptr: u32 = args.nth_checked(2)?;
+        let fn_bytes = self.function_from_name(name_ptr, name_size)?;
+        self.memory
+            .set(dest_ptr, &fn_bytes)
+            .map_err(|e| Error::Interpreter(e).into())
     }
 
     pub fn write(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
@@ -161,6 +218,8 @@ const READ_FUNC_INDEX: usize = 1;
 const ADD_FUNC_INDEX: usize = 2;
 const NEW_FUNC_INDEX: usize = 3;
 const SIZE_FUNC_INDEX: usize = 4;
+const FN_SIZE_FUNC_INDEX: usize = 5;
+const FN_BYTES_FUNC_INDEX: usize = 6;
 
 impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
     fn invoke_index(
@@ -171,6 +230,11 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
         match index {
             SIZE_FUNC_INDEX => {
                 let size = self.size_of_value(args)?;
+                Ok(Some(RuntimeValue::I32(size as i32)))
+            }
+
+            FN_SIZE_FUNC_INDEX => {
+                let size = self.function_size(args)?;
                 Ok(Some(RuntimeValue::I32(size as i32)))
             }
 
@@ -191,6 +255,11 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
 
             READ_FUNC_INDEX => {
                 let _ = self.read(args)?;
+                Ok(None)
+            }
+
+            FN_BYTES_FUNC_INDEX => {
+                let _ = self.function_bytes(args)?;
                 Ok(None)
             }
 
@@ -232,6 +301,10 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
                 Signature::new(&[ValueType::I32; 2][..], Some(ValueType::I32)),
                 SIZE_FUNC_INDEX,
             ),
+            "function_size" => FuncInstance::alloc_host(
+                Signature::new(&[ValueType::I32; 2][..], Some(ValueType::I32)),
+                FN_SIZE_FUNC_INDEX,
+            ),
             "write" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 4][..], None),
                 WRITE_FUNC_INDEX,
@@ -239,6 +312,10 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
             "read" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 4][..], None),
                 READ_FUNC_INDEX,
+            ),
+            "function_bytes" => FuncInstance::alloc_host(
+                Signature::new(&[ValueType::I32; 4][..], None),
+                FN_BYTES_FUNC_INDEX,
             ),
             "add" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 4][..], None),
@@ -287,10 +364,11 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
 }
 
 pub fn exec<T: TrackingCopy, G: GlobalState<T>>(
-    module: wasmi::Module,
+    parity_module: Module,
     account_addr: [u8; 20],
     gs: &G,
 ) -> Result<ExecutionEffect, Error> {
+    let module = wasmi::Module::from_parity_wasm_module(parity_module.clone())?;
     let resolver = RuntimeModuleImportResolver::new();
     let mut imports = ImportsBuilder::new();
     imports.push_resolver("env", &resolver);
@@ -307,6 +385,7 @@ pub fn exec<T: TrackingCopy, G: GlobalState<T>>(
         memory,
         state: &mut state,
         known_urefs,
+        module: parity_module,
     };
     let _ = instance.invoke_export("call", &[], &mut runtime)?;
 
