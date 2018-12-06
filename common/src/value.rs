@@ -1,7 +1,7 @@
 use super::alloc::string::{self, String};
 use super::alloc::vec::Vec;
-use super::key::Key;
 use super::bytesrepr::{BytesRepr, Error};
+use super::key::Key;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Value {
@@ -10,6 +10,7 @@ pub enum Value {
     ListInt32(Vec<i32>),
     String(string::String),
     Acct(Account),
+    Contract(Vec<u8>),
 }
 
 const INT32_ID: u8 = 0;
@@ -21,7 +22,7 @@ const ACCT_ID: u8 = 4;
 use self::Value::*;
 
 impl BytesRepr for Value {
-    fn to_bytes(&self) -> Vec<u8>  {
+    fn to_bytes(&self) -> Vec<u8> {
         match self {
             Int32(i) => {
                 let mut result = Vec::with_capacity(5);
@@ -52,6 +53,12 @@ impl BytesRepr for Value {
                 let mut result = Vec::new();
                 result.push(ACCT_ID);
                 result.extend(a.to_bytes());
+                result
+            }
+            Contract(arr) => {
+                let mut result = Vec::new();
+                result.push(BYTEARRAY_ID);
+                result.extend(arr.to_bytes());
                 result
             }
         }
@@ -93,7 +100,7 @@ pub struct Account {
 }
 
 impl BytesRepr for Account {
-    fn to_bytes(&self) -> Vec<u8>  {
+    fn to_bytes(&self) -> Vec<u8> {
         let mut result = Vec::new();
         result.extend(&self.public_key);
         result.extend(self.nonce.to_bytes());
@@ -104,7 +111,14 @@ impl BytesRepr for Account {
         let (public_key, rem1): ([u8; 32], &[u8]) = BytesRepr::from_bytes(bytes)?;
         let (nonce, rem2): (u64, &[u8]) = BytesRepr::from_bytes(rem1)?;
         let (known_urefs, rem3): (Vec<Key>, &[u8]) = BytesRepr::from_bytes(rem2)?;
-        Ok((Account{public_key, nonce, known_urefs}, rem3))
+        Ok((
+            Account {
+                public_key,
+                nonce,
+                known_urefs,
+            },
+            rem3,
+        ))
     }
 }
 
@@ -116,6 +130,7 @@ impl Value {
             String(_) => String::from("String"),
             ByteArray(_) => String::from("ByteArray"),
             Acct(_) => String::from("Account"),
+            Contract(_) => String::from("Contract"),
         }
     }
 

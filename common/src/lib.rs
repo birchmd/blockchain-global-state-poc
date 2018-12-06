@@ -19,12 +19,16 @@ mod ext_ffi {
         pub fn write(key_ptr: *const u8, key_size: usize, value_ptr: *const u8, value_size: usize);
         pub fn add(key_ptr: *const u8, key_size: usize, value_ptr: *const u8, value_size: usize);
         pub fn new_uref(key_ptr: *mut u8);
+        pub fn function_size(name_ptr: *const u8, name_size: usize) -> usize;
+        pub fn function_bytes(name_ptr: *const u8, name_size: usize, dest_ptr: *mut u8, dest_size: usize);
     }
 }
 
 pub mod ext {
     use super::alloc::alloc::{Alloc, Global};
     use super::ext_ffi;
+    use super::alloc::string::String;
+    use super::alloc::vec::Vec;
     use crate::key::{Key, UREF_SIZE};
     use crate::bytesrepr::BytesRepr;
     use crate::value::Value;
@@ -74,6 +78,20 @@ pub mod ext {
             core::slice::from_raw_parts(key_ptr, UREF_SIZE)
         };
         Key::from_bytes(slice).unwrap().0
+    }
+
+    pub fn store_function(name: &String) -> Key {
+        let (name_ptr, name_size) = to_ptr(name);
+        let fn_size = unsafe { ext_ffi::function_size(name_ptr, name_size) };
+        let fn_ptr = alloc_bytes(fn_size);
+        let fn_bytes = unsafe {
+            ext_ffi::function_bytes(name_ptr, name_size, fn_ptr, fn_size);
+            Vec::from_raw_parts(fn_ptr, fn_size, fn_size)
+        };
+        let key = new_uref(); //FIXME: replace with Key::Hash
+        let value = Value::Contract(fn_bytes);
+        write(&key, &value);
+        key
     }
 }
 
