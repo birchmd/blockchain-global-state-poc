@@ -24,6 +24,7 @@ mod ext_ffi {
 
 pub mod ext {
     use super::alloc::alloc::{Alloc, Global};
+    use super::alloc::vec::Vec;
     use super::ext_ffi;
     use crate::key::{Key, UREF_SIZE};
     use crate::bytesrepr::BytesRepr;
@@ -33,15 +34,17 @@ pub mod ext {
         Global.alloc_array(n).unwrap().as_ptr()
     }
 
-    fn to_ptr<T: BytesRepr>(t: &T) -> (*const u8, usize) {
+    fn to_ptr<T: BytesRepr>(t: &T) -> (*const u8, usize, Vec<u8>) {
         let bytes = t.to_bytes();
         let ptr = bytes.as_ptr();
         let size = bytes.len();
-        (ptr, size)
+        (ptr, size, bytes)
     }
     
     pub fn read(key: &Key) -> Value {
-        let (key_ptr, key_size) = to_ptr(key);
+        //Note: _bytes is necessary to keep the Vec<u8> in scope. If _bytes is
+        //      dropped then key_ptr becomes invalid.
+        let (key_ptr, key_size, _bytes) = to_ptr(key);
         let value_size = unsafe { ext_ffi::size_of_value(key_ptr, key_size) };
         let value_ptr = alloc_bytes(value_size);
         let value_bytes = unsafe {
@@ -52,16 +55,16 @@ pub mod ext {
     }
 
     pub fn write(key: &Key, value: &Value) {
-        let (key_ptr, key_size) = to_ptr(key);
-        let (value_ptr, value_size) = to_ptr(value);
+        let (key_ptr, key_size, _bytes) = to_ptr(key);
+        let (value_ptr, value_size, _bytes2) = to_ptr(value);
         unsafe {
             ext_ffi::write(key_ptr, key_size, value_ptr, value_size);
         }
     }
 
     pub fn add(key: &Key, value: &Value) {
-        let (key_ptr, key_size) = to_ptr(key);
-        let (value_ptr, value_size) = to_ptr(value);
+        let (key_ptr, key_size, _bytes) = to_ptr(key);
+        let (value_ptr, value_size, _bytes2) = to_ptr(value);
         unsafe {
             ext_ffi::add(key_ptr, key_size, value_ptr, value_size);
         }
