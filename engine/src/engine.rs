@@ -5,8 +5,8 @@ use storage::{Error as StorageError, ExecutionEffect, GlobalState, TrackingCopy}
 use wasmi::memory_units::Pages;
 use wasmi::{
     Error as InterpreterError, Externals, FuncInstance, FuncRef, HostError, ImportsBuilder,
-    MemoryDescriptor, MemoryInstance, MemoryRef, ModuleImportResolver, ModuleInstance, RuntimeArgs,
-    RuntimeValue, Signature, Trap, ValueType,
+    MemoryDescriptor, MemoryInstance, MemoryRef, ModuleImportResolver, ModuleInstance, ModuleRef,
+    RuntimeArgs, RuntimeValue, Signature, Trap, ValueType,
 };
 
 use parity_wasm::elements::{Error as ParityWasmError, Internal, Module};
@@ -57,6 +57,7 @@ pub struct Runtime<'a, T: TrackingCopy + 'a> {
     known_urefs: HashSet<Key>,
     state: &'a mut T,
     module: Module,
+    result: Vec<u8>,
 }
 
 impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
@@ -363,18 +364,40 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
     }
 }
 
-pub fn exec<T: TrackingCopy, G: GlobalState<T>>(
-    parity_module: Module,
-    account_addr: [u8; 20],
-    gs: &G,
-) -> Result<ExecutionEffect, Error> {
-    let module = wasmi::Module::from_parity_wasm_module(parity_module.clone())?;
+fn instance_and_memory(parity_module: Module) -> Result<(ModuleRef, MemoryRef), Error> {
+    let module = wasmi::Module::from_parity_wasm_module(parity_module)?;
     let resolver = RuntimeModuleImportResolver::new();
     let mut imports = ImportsBuilder::new();
     imports.push_resolver("env", &resolver);
     let instance = ModuleInstance::new(&module, &imports)?.assert_no_start();
 
     let memory = resolver.mem_ref()?;
+    Ok((instance, memory))
+}
+
+fn sub_call<T: TrackingCopy>(
+    parity_module: Module,
+    current_runtime: &mut Runtime<T>,
+) -> Result<Vec<u8>, Error> {
+    let (instance, memory) = instance_and_memory(parity_module.clone())?;
+    let known_urefs: HashSet<Key> = HashSet::new();
+    let mut runtime = Runtime {
+        memory,
+        state: current_runtime.state,
+        known_urefs,
+        module: parity_module,
+        result: Vec::new(),
+    };
+    let _ = instance.invoke_export("call", &[], &mut runtime)?;
+    Ok(runtime.result)
+}
+
+pub fn exec<T: TrackingCopy, G: GlobalState<T>>(
+    parity_module: Module,
+    account_addr: [u8; 20],
+    gs: &G,
+) -> Result<ExecutionEffect, Error> {
+    let (instance, memory) = instance_and_memory(parity_module.clone())?;
     let account = gs.get(&Key::Account(account_addr))?.as_account();
     let mut state = gs.tracking_copy();
     let mut known_urefs: HashSet<Key> = HashSet::new();
@@ -386,6 +409,7 @@ pub fn exec<T: TrackingCopy, G: GlobalState<T>>(
         state: &mut state,
         known_urefs,
         module: parity_module,
+        result: Vec::new(),
     };
     let _ = instance.invoke_export("call", &[], &mut runtime)?;
 
