@@ -30,10 +30,14 @@ mod ext_ffi {
 }
 
 pub mod ext {
+    extern crate blake2;
+
     use super::alloc::alloc::{Alloc, Global};
     use super::alloc::string::String;
     use super::alloc::vec::Vec;
     use super::ext_ffi;
+    use blake2::digest::{Input, VariableOutput};
+    use blake2::VarBlake2b;
     use crate::bytesrepr::BytesRepr;
     use crate::key::{Key, UREF_SIZE};
     use crate::value::Value;
@@ -95,7 +99,11 @@ pub mod ext {
             ext_ffi::function_bytes(name_ptr, name_size, fn_ptr, fn_size);
             Vec::from_raw_parts(fn_ptr, fn_size, fn_size)
         };
-        let key = new_uref(); //FIXME: replace with Key::Hash
+        let mut hasher = VarBlake2b::new(32).unwrap();
+        hasher.input(&fn_bytes);
+        let mut fn_hash = [0u8; 32];
+        hasher.variable_result(|hash| fn_hash.clone_from_slice(hash));
+        let key = Key::Hash(fn_hash);
         let value = Value::Contract(fn_bytes);
         write(&key, &value);
         key
