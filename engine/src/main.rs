@@ -2,6 +2,7 @@ extern crate common;
 extern crate storage;
 extern crate wasmi;
 extern crate parity_wasm;
+extern crate pwasm_utils;
 
 use common::key::Key;
 use common::value::{Account, Value};

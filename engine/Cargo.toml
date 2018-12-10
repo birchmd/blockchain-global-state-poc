@@ -6,5 +6,6 @@ authors = ["Michael Birch <birchmd@casperlabs.io>"]
 [dependencies]
 wasmi = "0.4.2"
 parity-wasm = "0.31"
+pwasm-utils = "0.6.0"
 storage = { path = "../storage" }
 common = { path = "../common", features = ["std"] }
