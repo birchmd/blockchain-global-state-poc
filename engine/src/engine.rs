@@ -157,9 +157,9 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
     }
 
     pub fn ret(&mut self, value_ptr: u32, value_size: usize) -> Trap {
-        let mut buf = Vec::with_capacity(value_size);
-        match self.memory.get_into(value_ptr, &mut buf) {
-            Ok(_) => {
+        let mem_get = self.memory.get(value_ptr, value_size);
+        match mem_get {
+            Ok(buf) => {
                 self.result = buf;
                 Error::Ret.into()
             }
@@ -182,7 +182,6 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         let module = parity_wasm::deserialize_buffer(&serialized_module)?;
 
         let result = sub_call(module, args, self);
-		println!("do_call_contract returned with {:?}", result);
 		result
     }
 
@@ -548,7 +547,6 @@ fn sub_call<T: TrackingCopy>(
     args: Vec<Vec<u8>>,
     current_runtime: &mut Runtime<T>,
 ) -> Result<Vec<u8>, Error> {
-	println!("sub_call started");
     let (instance, memory) = instance_and_memory(parity_module.clone())?;
     let known_urefs: HashSet<Key> = HashSet::new();
     let mut runtime = Runtime {
@@ -562,7 +560,6 @@ fn sub_call<T: TrackingCopy>(
 
     let result = instance.invoke_export("call", &[], &mut runtime);
 
-	println!("sub_call finished with {:?}", result);
     match result {
         Ok(_) => Ok(runtime.result),
         Err(e) => {

@@ -38,7 +38,8 @@ pub extern "C" fn call() {
     assert_eq!(s, s_read);
 
     let export_name = String::from("plus_one_ext");
-    let contract = fn_by_name(&export_name);
+	let hash = store_function(&export_name);
+    let contract = read(&hash);
     let args = vec![3i32.to_bytes()];
     let result: i32 = call_contract(&contract, &args);
     assert_eq!(result, 4);
