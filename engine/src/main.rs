@@ -1,14 +1,14 @@
 extern crate common;
-extern crate storage;
-extern crate wasmi;
 extern crate parity_wasm;
 extern crate pwasm_utils;
+extern crate storage;
+extern crate wasmi;
 
 use common::key::Key;
 use common::value::{Account, Value};
+use parity_wasm::elements::{deserialize_buffer, Module};
 use storage::transform::Transform;
 use storage::GlobalState;
-use parity_wasm::elements::{deserialize_buffer, Module};
 
 pub mod engine;
 

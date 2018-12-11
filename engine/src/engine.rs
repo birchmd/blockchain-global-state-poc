@@ -92,18 +92,18 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         deserialize(&bytes).map_err(|e| Error::BytesRepr(e).into())
     }
 
-	fn rename_export_to_call(module: &mut Module, name: String) {
-            let main_export = module
-                .export_section_mut()
-                .unwrap()
-                .entries_mut()
-                .into_iter()
-                .find(|e| e.field() == name)
-                .unwrap()
-                .field_mut();
-            main_export.clear();
-            main_export.push_str("call");
-	}
+    fn rename_export_to_call(module: &mut Module, name: String) {
+        let main_export = module
+            .export_section_mut()
+            .unwrap()
+            .entries_mut()
+            .into_iter()
+            .find(|e| e.field() == name)
+            .unwrap()
+            .field_mut();
+        main_export.clear();
+        main_export.push_str("call");
+    }
 
     fn function_from_name(&mut self, name_ptr: u32, name_size: u32) -> Result<Vec<u8>, Trap> {
         let name = self.name_from_mem(name_ptr, name_size)?;
@@ -117,7 +117,7 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         if has_name {
             let mut module = self.module.clone();
             let _ = pwasm_utils::optimize(&mut module, vec![&name]).unwrap();
-			Self::rename_export_to_call(&mut module, name);
+            Self::rename_export_to_call(&mut module, name);
 
             parity_wasm::serialize(module).map_err(|e| Error::ParityWasm(e).into())
         } else {
@@ -182,7 +182,7 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         let module = parity_wasm::deserialize_buffer(&serialized_module)?;
 
         let result = sub_call(module, args, self);
-		result
+        result
     }
 
     pub fn size_of_call_result(
