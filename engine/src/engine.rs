@@ -188,7 +188,7 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         self.set_mem_from_buf(dest_ptr)
     }
 
-    pub fn ser_function(&mut self, args: RuntimeArgs) -> Result<usize, Trap> {
+    pub fn serialize_function(&mut self, args: RuntimeArgs) -> Result<usize, Trap> {
         //args(0) = pointer to name in wasm memory
         //args(1) = size of name in wasm memory
         let name_ptr: u32 = args.nth_checked(0)?;
@@ -279,7 +279,7 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
             }
 
             SER_FN_FUNC_INDEX => {
-                let size = self.ser_function(args)?;
+                let size = self.serialize_function(args)?;
                 Ok(Some(RuntimeValue::I32(size as i32)))
             }
 
