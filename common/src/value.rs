@@ -33,19 +33,19 @@ impl BytesRepr for Value {
             }
 
             ByteArray(arr) => {
-                let mut result = Vec::new();
+                let mut result = Vec::with_capacity(5 + arr.len());
                 result.push(BYTEARRAY_ID);
                 result.extend(arr.to_bytes());
                 result
             }
             ListInt32(arr) => {
-                let mut result = Vec::new();
+                let mut result = Vec::with_capacity(5 + arr.len());
                 result.push(LISTINT32_ID);
                 result.extend(arr.to_bytes());
                 result
             }
             String(s) => {
-                let mut result = Vec::new();
+                let mut result = Vec::with_capacity(5 + s.len());
                 result.push(STRING_ID);
                 result.extend(s.to_bytes());
                 result
@@ -57,7 +57,7 @@ impl BytesRepr for Value {
                 result
             }
             Contract(arr) => {
-                let mut result = Vec::new();
+                let mut result = Vec::with_capacity(5 + arr.len());
                 result.push(CONTRACT_ID);
                 result.extend(arr.to_bytes());
                 result

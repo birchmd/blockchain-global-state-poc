@@ -40,6 +40,7 @@ pub extern "C" fn call() {
     let export_name = String::from("plus_one_ext");
     let hash = store_function(&export_name);
     let contract = read(&hash);
+	//TODO: add some convenient macro to common to do this conversion
     let args = vec![3i32.to_bytes()];
     let result: i32 = call_contract(&contract, &args);
     assert_eq!(result, 4);
