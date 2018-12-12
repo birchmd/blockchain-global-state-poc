@@ -67,6 +67,7 @@ pub struct Runtime<'a, T: TrackingCopy + 'a> {
     state: &'a mut T,
     module: Module,
     result: Vec<u8>,
+    host_buf: Vec<u8>,
 }
 
 impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
@@ -137,23 +138,19 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         Ok((key, value))
     }
 
-    pub fn size_of_arg(&self, i: usize) -> Result<usize, Trap> {
+    pub fn load_arg(&mut self, i: usize) -> Result<usize, Trap> {
         if i < self.args.len() {
-            Ok(self.args[i].len())
+            self.host_buf = self.args[i].clone();
+            Ok(self.host_buf.len())
         } else {
             Err(Error::ArgIndexOutOfBounds(i).into())
         }
     }
 
-    pub fn get_arg(&mut self, i: usize, dest_ptr: u32) -> Result<(), Trap> {
-        if i < self.args.len() {
-            let arg = &self.args[i];
-            self.memory
-                .set(dest_ptr, &arg)
-                .map_err(|e| Error::Interpreter(e).into())
-        } else {
-            Err(Error::ArgIndexOutOfBounds(i).into())
-        }
+    fn set_mem_from_buf(&mut self, dest_ptr: u32) -> Result<(), Trap> {
+        self.memory
+            .set(dest_ptr, &self.host_buf)
+            .map_err(|e| Error::Interpreter(e).into())
     }
 
     pub fn ret(&mut self, value_ptr: u32, value_size: usize) -> Trap {
@@ -167,13 +164,13 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         }
     }
 
-    fn do_call_contract(
+    fn call_contract(
         &mut self,
         fn_ptr: u32,
         fn_size: usize,
         args_ptr: u32,
         args_size: usize,
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<usize, Error> {
         let fn_bytes = self.memory.get(fn_ptr, fn_size)?;
         let args_bytes = self.memory.get(args_ptr, args_size)?;
 
@@ -181,56 +178,24 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         let serialized_module: Vec<u8> = deserialize(&fn_bytes)?;
         let module = parity_wasm::deserialize_buffer(&serialized_module)?;
 
-        let result = sub_call(module, args, self);
-        result
+        let result = sub_call(module, args, self)?;
+        self.host_buf = result;
+        Ok(self.host_buf.len())
     }
 
-    pub fn size_of_call_result(
-        &mut self,
-        fn_ptr: u32,
-        fn_size: usize,
-        args_ptr: u32,
-        args_size: usize,
-    ) -> Result<usize, Trap> {
-        let result = self.do_call_contract(fn_ptr, fn_size, args_ptr, args_size)?;
-        Ok(result.len())
+    pub fn set_mem(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
+        let dest_ptr: u32 = args.nth_checked(0)?;
+        self.set_mem_from_buf(dest_ptr)
     }
 
-    pub fn call_contract(
-        &mut self,
-        fn_ptr: u32,
-        fn_size: usize,
-        args_ptr: u32,
-        args_size: usize,
-        result_ptr: u32,
-    ) -> Result<(), Trap> {
-        let result = self.do_call_contract(fn_ptr, fn_size, args_ptr, args_size)?;
-        self.memory
-            .set(result_ptr, &result)
-            .map_err(|e| Error::Interpreter(e).into())
-    }
-
-    pub fn function_size(&mut self, args: RuntimeArgs) -> Result<usize, Trap> {
+    pub fn serialize_function(&mut self, args: RuntimeArgs) -> Result<usize, Trap> {
         //args(0) = pointer to name in wasm memory
         //args(1) = size of name in wasm memory
         let name_ptr: u32 = args.nth_checked(0)?;
         let name_size: u32 = args.nth_checked(1)?;
         let fn_bytes = self.function_from_name(name_ptr, name_size)?;
-        Ok(fn_bytes.len())
-    }
-
-    pub fn function_bytes(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
-        //args(0) = pointer to name in wasm memory
-        //args(1) = size of name
-        //args(2) = pointer to fn dest
-        //args(3) = size of fn dest
-        let name_ptr: u32 = args.nth_checked(0)?;
-        let name_size: u32 = args.nth_checked(1)?;
-        let dest_ptr: u32 = args.nth_checked(2)?;
-        let fn_bytes = self.function_from_name(name_ptr, name_size)?;
-        self.memory
-            .set(dest_ptr, &fn_bytes)
-            .map_err(|e| Error::Interpreter(e).into())
+        self.host_buf = fn_bytes;
+        Ok(self.host_buf.len())
     }
 
     pub fn write(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
@@ -264,31 +229,17 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
         self.state.read(key).map_err(|e| e.into())
     }
 
-    pub fn size_of_value(&mut self, args: RuntimeArgs) -> Result<usize, Trap> {
+    pub fn read_value(&mut self, args: RuntimeArgs) -> Result<usize, Trap> {
         //args(0) = pointer to key in wasm memory
         //args(1) = size of key in wasm memory
-        let key_ptr: u32 = args.nth_checked(0)?;
-        let key_size: u32 = args.nth_checked(1)?;
-        let value = self.value_from_key(key_ptr, key_size)?;
-        let value_bytes = value.to_bytes();
-        Ok(value_bytes.len())
-    }
-
-    pub fn read(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
-        //args(0) = pointer to key in wasm memory
-        //args(1) = size of key in wasm memory
-        //args(2) = value destination pointer
-        //args(3) = size of value
         let key_ptr: u32 = args.nth_checked(0)?;
         let key_size: u32 = args.nth_checked(1)?;
         let value_bytes = {
             let value = self.value_from_key(key_ptr, key_size)?;
             value.to_bytes()
         };
-        let value_ptr: u32 = args.nth_checked(2)?;
-        self.memory
-            .set(value_ptr, &value_bytes)
-            .map_err(|e| Error::Interpreter(e).into())
+        self.host_buf = value_bytes;
+        Ok(self.host_buf.len())
     }
 
     pub fn new_uref(&mut self, args: RuntimeArgs) -> Result<(), Trap> {
@@ -302,18 +253,17 @@ impl<'a, T: TrackingCopy + 'a> Runtime<'a, T> {
     }
 }
 
-//TODO: add other functions
 const WRITE_FUNC_INDEX: usize = 0;
 const READ_FUNC_INDEX: usize = 1;
 const ADD_FUNC_INDEX: usize = 2;
 const NEW_FUNC_INDEX: usize = 3;
-const SIZE_FUNC_INDEX: usize = 4;
-const FN_SIZE_FUNC_INDEX: usize = 5;
-const FN_BYTES_FUNC_INDEX: usize = 6;
-const SIZE_OF_ARG_FUNC_INDEX: usize = 7;
+const GET_READ_FUNC_INDEX: usize = 4;
+const SER_FN_FUNC_INDEX: usize = 5;
+const GET_FN_FUNC_INDEX: usize = 6;
+const LOAD_ARG_FUNC_INDEX: usize = 7;
 const GET_ARG_FUNC_INDEX: usize = 8;
 const RET_FUNC_INDEX: usize = 9;
-const SIZE_OF_CALL_RESULT_FUNC_INDEX: usize = 10;
+const GET_CALL_RESULT_FUNC_INDEX: usize = 10;
 const CALL_CONTRACT_FUNC_INDEX: usize = 11;
 
 impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
@@ -323,13 +273,13 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
         args: RuntimeArgs,
     ) -> Result<Option<RuntimeValue>, Trap> {
         match index {
-            SIZE_FUNC_INDEX => {
-                let size = self.size_of_value(args)?;
+            READ_FUNC_INDEX => {
+                let size = self.read_value(args)?;
                 Ok(Some(RuntimeValue::I32(size as i32)))
             }
 
-            FN_SIZE_FUNC_INDEX => {
-                let size = self.function_size(args)?;
+            SER_FN_FUNC_INDEX => {
+                let size = self.serialize_function(args)?;
                 Ok(Some(RuntimeValue::I32(size as i32)))
             }
 
@@ -348,27 +298,24 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
                 Ok(None)
             }
 
-            READ_FUNC_INDEX => {
-                let _ = self.read(args)?;
+            GET_READ_FUNC_INDEX => {
+                let _ = self.set_mem(args)?;
                 Ok(None)
             }
 
-            FN_BYTES_FUNC_INDEX => {
-                let _ = self.function_bytes(args)?;
+            GET_FN_FUNC_INDEX => {
+                let _ = self.set_mem(args)?;
                 Ok(None)
             }
 
-            SIZE_OF_ARG_FUNC_INDEX => {
+            LOAD_ARG_FUNC_INDEX => {
                 let i: u32 = args.nth_checked(0)?;
-                let size = self.size_of_arg(i as usize)?;
+                let size = self.load_arg(i as usize)?;
                 Ok(Some(RuntimeValue::I32(size as i32)))
             }
 
             GET_ARG_FUNC_INDEX => {
-                let i: u32 = args.nth_checked(0)?;
-                let dest_ptr: u32 = args.nth_checked(1)?;
-
-                let _ = self.get_arg(i as usize, dest_ptr)?;
+                let _ = self.set_mem(args)?;
                 Ok(None)
             }
 
@@ -379,35 +326,19 @@ impl<'a, T: TrackingCopy + 'a> Externals for Runtime<'a, T> {
                 Err(self.ret(value_ptr, value_size as usize))
             }
 
-            SIZE_OF_CALL_RESULT_FUNC_INDEX => {
-                let fn_ptr: u32 = args.nth_checked(0)?;
-                let fn_size: u32 = args.nth_checked(1)?;
-                let args_ptr: u32 = args.nth_checked(2)?;
-                let args_size: u32 = args.nth_checked(3)?;
-
-                let size = self.size_of_call_result(
-                    fn_ptr,
-                    fn_size as usize,
-                    args_ptr,
-                    args_size as usize,
-                )?;
-                Ok(Some(RuntimeValue::I32(size as i32)))
-            }
-
             CALL_CONTRACT_FUNC_INDEX => {
                 let fn_ptr: u32 = args.nth_checked(0)?;
                 let fn_size: u32 = args.nth_checked(1)?;
                 let args_ptr: u32 = args.nth_checked(2)?;
                 let args_size: u32 = args.nth_checked(3)?;
-                let result_ptr: u32 = args.nth_checked(4)?;
 
-                let _ = self.call_contract(
-                    fn_ptr,
-                    fn_size as usize,
-                    args_ptr,
-                    args_size as usize,
-                    result_ptr,
-                )?;
+                let size =
+                    self.call_contract(fn_ptr, fn_size as usize, args_ptr, args_size as usize)?;
+                Ok(Some(RuntimeValue::I32(size as i32)))
+            }
+
+            GET_CALL_RESULT_FUNC_INDEX => {
+                let _ = self.set_mem(args)?;
                 Ok(None)
             }
 
@@ -445,25 +376,25 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
         _signature: &Signature,
     ) -> Result<FuncRef, InterpreterError> {
         let func_ref = match field_name {
-            "size_of_value" => FuncInstance::alloc_host(
+            "read_value" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 2][..], Some(ValueType::I32)),
-                SIZE_FUNC_INDEX,
+                READ_FUNC_INDEX,
             ),
-            "function_size" => FuncInstance::alloc_host(
+            "serialize_function" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 2][..], Some(ValueType::I32)),
-                FN_SIZE_FUNC_INDEX,
+                SER_FN_FUNC_INDEX,
             ),
             "write" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 4][..], None),
                 WRITE_FUNC_INDEX,
             ),
-            "read" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32; 4][..], None),
-                READ_FUNC_INDEX,
+            "get_read" => FuncInstance::alloc_host(
+                Signature::new(&[ValueType::I32; 1][..], None),
+                GET_READ_FUNC_INDEX,
             ),
-            "function_bytes" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32; 4][..], None),
-                FN_BYTES_FUNC_INDEX,
+            "get_function" => FuncInstance::alloc_host(
+                Signature::new(&[ValueType::I32; 1][..], None),
+                GET_FN_FUNC_INDEX,
             ),
             "add" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 4][..], None),
@@ -473,25 +404,25 @@ impl<'a> ModuleImportResolver for RuntimeModuleImportResolver {
                 Signature::new(&[ValueType::I32; 1][..], None),
                 NEW_FUNC_INDEX,
             ),
-            "size_of_arg" => FuncInstance::alloc_host(
+            "load_arg" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 1][..], Some(ValueType::I32)),
-                SIZE_OF_ARG_FUNC_INDEX,
+                LOAD_ARG_FUNC_INDEX,
             ),
             "get_arg" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32; 3][..], None),
+                Signature::new(&[ValueType::I32; 1][..], None),
                 GET_ARG_FUNC_INDEX,
             ),
             "ret" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 2][..], None),
                 RET_FUNC_INDEX,
             ),
-            "size_of_call_result" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32; 4][..], Some(ValueType::I32)),
-                SIZE_OF_CALL_RESULT_FUNC_INDEX,
-            ),
             "call_contract" => FuncInstance::alloc_host(
-                Signature::new(&[ValueType::I32; 6][..], None),
+                Signature::new(&[ValueType::I32; 4][..], Some(ValueType::I32)),
                 CALL_CONTRACT_FUNC_INDEX,
+            ),
+            "get_call_result" => FuncInstance::alloc_host(
+                Signature::new(&[ValueType::I32; 1][..], None),
+                GET_CALL_RESULT_FUNC_INDEX,
             ),
             _ => {
                 return Err(InterpreterError::Function(format!(
@@ -556,6 +487,7 @@ fn sub_call<T: TrackingCopy>(
         known_urefs,
         module: parity_module,
         result: Vec::new(),
+        host_buf: Vec::new(),
     };
 
     let result = instance.invoke_export("call", &[], &mut runtime);
@@ -592,6 +524,7 @@ pub fn exec<T: TrackingCopy, G: GlobalState<T>>(
         known_urefs,
         module: parity_module,
         result: Vec::new(),
+        host_buf: Vec::new(),
     };
     let _ = instance.invoke_export("call", &[], &mut runtime)?;
 
