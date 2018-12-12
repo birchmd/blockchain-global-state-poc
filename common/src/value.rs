@@ -28,38 +28,38 @@ impl BytesRepr for Value {
             Int32(i) => {
                 let mut result = Vec::with_capacity(5);
                 result.push(INT32_ID);
-                result.extend(i.to_bytes());
+                result.append(&mut i.to_bytes());
                 result
             }
 
             ByteArray(arr) => {
                 let mut result = Vec::with_capacity(5 + arr.len());
                 result.push(BYTEARRAY_ID);
-                result.extend(arr.to_bytes());
+                result.append(&mut arr.to_bytes());
                 result
             }
             ListInt32(arr) => {
                 let mut result = Vec::with_capacity(5 + arr.len());
                 result.push(LISTINT32_ID);
-                result.extend(arr.to_bytes());
+                result.append(&mut arr.to_bytes());
                 result
             }
             String(s) => {
                 let mut result = Vec::with_capacity(5 + s.len());
                 result.push(STRING_ID);
-                result.extend(s.to_bytes());
+                result.append(&mut s.to_bytes());
                 result
             }
             Acct(a) => {
                 let mut result = Vec::new();
                 result.push(ACCT_ID);
-                result.extend(a.to_bytes());
+                result.append(&mut a.to_bytes());
                 result
             }
             Contract(arr) => {
                 let mut result = Vec::with_capacity(5 + arr.len());
                 result.push(CONTRACT_ID);
-                result.extend(arr.to_bytes());
+                result.append(&mut arr.to_bytes());
                 result
             }
         }
@@ -108,8 +108,8 @@ impl BytesRepr for Account {
     fn to_bytes(&self) -> Vec<u8> {
         let mut result = Vec::new();
         result.extend(&self.public_key);
-        result.extend(self.nonce.to_bytes());
-        result.extend(self.known_urefs.to_bytes());
+        result.append(&mut self.nonce.to_bytes());
+        result.append(&mut self.known_urefs.to_bytes());
         result
     }
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
